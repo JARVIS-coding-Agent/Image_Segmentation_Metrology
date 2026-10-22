@@ -1,0 +1,122 @@
+# 動物眼睛量測 Pipeline（Image Segmentation + Metrology）
+
+將影像分割（Image Segmentation）模型的輸出，應用於實際測量學（Metrology）任務：
+從 COCO 資料集挑出含兩隻（含）以上動物的圖片，分割動物輪廓、定位動物眼睛，並量測
+（A）每隻動物的雙眼距離、（B）任意兩隻動物的右眼距離。
+
+## 專案介紹
+
+- **輸入**：COCO 資料集中含 ≥2 隻動物的圖片（動物類別任選）。
+- **處理**：YOLO11-seg 分割動物輪廓 → 以頭部 ROI + 幾何/暗區啟發式定位左右眼（SAM2 精修為可選）。
+- **輸出**：
+  - 疊圖（`outputs/annotated/*.png`）：mask、左右眼（左藍右紅）、量測連線與距離數值。
+  - 量測 CSV（`outputs/measurements.csv`）：測量 A 與測量 B 共用固定欄位 schema。
+  - 評估報告（`outputs/eval_report.md`）：IoU / Dice / NME 與 CPU 單張 P95 效能實測。
+
+### 成果摘要
+
+- 測量 A：同一隻動物左眼↔右眼的歐氏距離。
+- 測量 B：兩隻動物右眼↔右眼的歐氏距離（恰 2 隻→1 筆；恰 ≥3 隻→所有兩兩配對 C(n,2)）。
+- 無法可靠定位眼睛者標記「無法量測」並記錄原因，不輸出臆測值；相同輸入與設定產生相同結果。
+
+## 技術棧
+
+| 項目 | 技術 |
+|------|------|
+| 語言 | Python 3.11 |
+| 實例分割 | Ultralytics YOLO11-seg（COCO 預訓練） |
+| 眼睛定位 | 頭部 ROI + 幾何/暗區啟發式（純 numpy）；SAM2 point-prompt 精修（可選） |
+| COCO 讀取/篩選 | pycocotools |
+| 影像/數值 | opencv-python、numpy |
+| 視覺化 | matplotlib |
+| 資料模型 | pydantic |
+| 測試 | pytest、pytest-cov |
+
+### 為什麼用 YOLO11-seg
+
+COCO 80 類預訓練直接涵蓋常見動物類別，一次推論即取得類別、bbox、instance mask 與信心分數，
+CPU 可推論、部署容易，符合離線與效能需求。COCO 沒有動物眼睛標註，故眼睛定位以啟發式為主並標記估計值。
+
+### 評估公式
+
+- IoU = |A∩B| / |A∪B|
+- Dice = 2|A∩B| / (|A|+|B|)
+- NME = (1/N) Σ ‖p_i − p̂_i‖₂ / d_norm（以眼間距或頭框尺寸正規化）
+
+### 量測公式與驗證
+
+- 測量 A：D = √((x_L−x_R)² + (y_L−y_R)²)
+- 測量 B：D = ‖R_a − R_b‖₂
+- 驗證：疊圖人工目視、≥10 張人工 ground truth 的 NME/像素誤差對照、左右眼對稱性檢查、pytest 單元測試。
+
+## 本地運行步驟
+
+```bash
+# 1. 建立虛擬環境並安裝依賴
+python -m venv .venv
+# Windows: .venv\Scripts\activate   |  macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2. 設定環境變數
+cp .env.example .env   # 依需要調整 COCO 路徑、模型權重等
+
+# 3. 準備資料：將 COCO 子集放到 data/coco/（影像 + annotations JSON）
+
+# 4. 篩選含 ≥2 動物圖片（產出 outputs/selected_images.json）
+python -m src.pipeline --coco-dir data/coco --min-animals 2
+
+# 5. 對影像執行量測（產出疊圖 + measurements.csv）
+python -m src.pipeline --input data/samples --output-dir outputs
+
+# 6. 評估（產出 eval_report.md，含 CPU P95 實測）
+python -m src.pipeline --input data/samples --eval
+
+# 7. 執行測試
+pytest tests -q
+```
+
+主要 CLI 旗標見 `specs/001-animal-eye-metrology/contracts/cli.md`。
+
+## Docker 部署指令
+
+```bash
+docker compose build
+# 執行 pipeline（將本地 data/、outputs/ 掛載進容器）
+docker compose run --rm pipeline python -m src.pipeline --coco-dir data/coco --input data/samples
+```
+
+## API 文件
+
+**不適用。** 本題為離線影像處理 pipeline，不提供線上推論 API 服務，故無 API 文件連結。
+對外介面為 CLI，契約見 `specs/001-animal-eye-metrology/contracts/cli.md`。
+
+## 測試帳號資訊
+
+**不適用。** 本專案無登入機制或需認證的服務，故無測試帳號。
+
+## 專案結構
+
+```
+src/            # config, models, segmentation, eye_detector, metrology, evaluate, visualize, csv_writer, pipeline
+tests/          # unit（metrology/evaluate/eye_detector）, integration（pipeline/selection）
+data/           # coco 子集、samples、ground_truth（內容由 .gitignore 忽略）
+outputs/        # annotated 疊圖、measurements.csv、eval_report.md
+docs/           # architecture.md 系統架構圖（mermaid）
+specs/          # spec-kit 規格文件（spec/plan/research/data-model/contracts/tasks）
+```
+
+## 系統架構圖
+
+資料流：COCO → 篩選 → 分割 → 眼睛定位 → 測量 A/B → 評估 → 視覺化 + CSV。完整版見 `docs/architecture.md`。
+
+```mermaid
+flowchart LR
+    A["COCO 資料集"] --> B["coco_selector<br/>篩選 ≥2 動物"]
+    B --> C["segmentation<br/>YOLO11-seg"]
+    C --> D["eye_detector<br/>頭部ROI+暗區啟發式"]
+    D --> E["metrology<br/>測量 A / 測量 B"]
+    E --> F["evaluate<br/>IoU / Dice / NME"]
+    E --> G["visualize<br/>疊圖"]
+    E --> H["csv_writer<br/>measurements.csv"]
+    F --> I["eval_report.md<br/>CPU P95 實測"]
+```

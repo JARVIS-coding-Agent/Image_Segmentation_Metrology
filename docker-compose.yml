@@ -1,0 +1,15 @@
+services:
+  pipeline:
+    build: .
+    image: animal-eye-metrology:latest
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    environment:
+      - COCO_DIR=data/coco
+      - OUTPUT_DIR=outputs
+      - MIN_ANIMALS=2
+      - SEED=42
+    # 預設顯示說明；實際執行範例：
+    #   docker compose run --rm pipeline --coco-dir data/coco --input data/samples
+    command: ["--help"]

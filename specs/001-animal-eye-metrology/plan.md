@@ -97,7 +97,7 @@ outputs/
 └── eval_report.md       # 評估報告（IoU/Dice/NME + 效能實測）
 
 docs/
-└── architecture.png     # 系統架構圖
+└── architecture.md     # 系統架構圖（mermaid）
 
 # 專案根
 README.md                # 繁中：介紹/技術棧/運行/Docker/API 與測試帳號適用性

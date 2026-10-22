@@ -118,14 +118,14 @@
 
 **Purpose**: 跨故事的交付物與收尾
 
-- [ ] T029 [P] 撰寫 `README.md`（繁中）：專案介紹、技術棧、本地運行步驟、Docker 指令、API 文件與測試帳號「不適用」說明（FR-016、SC-006、constitution V）
-- [ ] T030 [P] 建立 `Dockerfile` 與 `docker-compose.yml`，支援離線執行 pipeline（SC-006）
-- [ ] T031 [P] 產出系統架構圖 `docs/architecture.png`（COCO→篩選→分割→眼睛→測量→評估→視覺化 資料流）
-- [ ] T032 產生 `outputs/measurements.csv` 範例（至少一筆測量 A 與一筆測量 B，欄位 per contracts/measurements-csv.md）（交付項目 4）
-- [ ] T033 [P] 補齊決定性驗證（固定種子，相同輸入兩次執行結果一致）測試於 `tests/integration/test_pipeline.py`（FR-014、SC-005）
-- [ ] T034 確認 metrology 與 evaluate 模組覆蓋率 ≥ 80%（constitution II），不足則補單元測試
-- [ ] T035 執行 `quickstart.md` 全部情境驗證，修正發現的問題
-- [ ] T036 [P] 程式碼清理：移除死碼/除錯輸出、補 docstring（座標慣例/單位/輸入輸出 per constitution I）
+- [X] T029 [P] 撰寫 `README.md`（繁中）：專案介紹、技術棧、本地運行步驟、Docker 指令、API 文件與測試帳號「不適用」說明（FR-016、SC-006、constitution V）
+- [X] T030 [P] 建立 `Dockerfile` 與 `docker-compose.yml`，支援離線執行 pipeline（SC-006）
+- [X] T031 [P] 產出系統架構圖 `docs/architecture.md`（mermaid 流程圖，COCO→篩選→分割→眼睛→測量→評估→視覺化 資料流）
+- [X] T032 產生 `outputs/measurements.csv` 範例（至少一筆測量 A 與一筆測量 B，欄位 per contracts/measurements-csv.md）（交付項目 4）
+- [X] T033 [P] 補齊決定性驗證（固定種子，相同輸入兩次執行結果一致）測試於 `tests/integration/test_pipeline.py`（FR-014、SC-005）
+- [X] T034 確認 metrology 與 evaluate 模組覆蓋率 ≥ 80%（constitution II），不足則補單元測試
+- [X] T035 執行 `quickstart.md` 全部情境驗證，修正發現的問題
+- [X] T036 [P] 程式碼清理：移除死碼/除錯輸出、補 docstring（座標慣例/單位/輸入輸出 per constitution I）
 
 ---
 
