@@ -99,28 +99,7 @@ $$\text{NME} = \frac{1}{N}\sum_{i=1}^{N}\frac{\lVert p_i - \hat{p}_i \rVert_2}{d
 | 資料模型 | pydantic |
 | 測試 | pytest、pytest-cov |
 
-### 為什麼用 YOLO11-seg
-
-COCO 80 類預訓練直接涵蓋常見動物類別，一次推論即取得類別、bbox、instance mask 與信心分數，
-CPU 可推論、部署容易，符合離線與效能需求。COCO 沒有動物眼睛標註，故眼睛定位以啟發式為主並標記估計值。
-
-### 評估公式
-
-$$\text{IoU} = \frac{|A \cap B|}{|A \cup B|} \qquad \text{Dice} = \frac{2|A \cap B|}{|A| + |B|} \qquad \text{NME} = \frac{1}{N}\sum_{i=1}^{N}\frac{\lVert p_i - \hat{p}_i \rVert_2}{d_{norm}}$$
-
-（NME 以眼間距或頭框尺寸正規化。）
-
-### 量測公式與驗證
-
-測量 A（雙眼距離）：
-
-$$D = \sqrt{(x_L - x_R)^2 + (y_L - y_R)^2}$$
-
-測量 B（兩動物右眼距離）：
-
-$$D = \lVert R_a - R_b \rVert_2$$
-
-驗證：疊圖人工目視、≥10 張人工 ground truth 的 NME/像素誤差對照、左右眼對稱性檢查、pytest 單元測試。
+> 模型選用理由、評估公式（IoU / Dice / NME）、量測公式與驗證方式見上方「題目回應」第 5、6 項。
 
 ## 本地運行步驟
 
