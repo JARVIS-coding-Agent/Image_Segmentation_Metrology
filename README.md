@@ -25,7 +25,7 @@
 |------|------|
 | 語言 | Python 3.11 |
 | 實例分割 | Ultralytics YOLO11-seg（COCO 預訓練） |
-| 眼睛定位 | 頭部 ROI + 幾何/暗區啟發式（純 numpy）；SAM2 point-prompt 精修（可選） |
+| 眼睛定位 | 貓：OpenCV Haar frontalcatface 臉偵測 + 臉內暗點對稱定位；其他動物：頭部 ROI + 幾何/暗區啟發式；SAM2 精修（可選） |
 | COCO 讀取/篩選 | pycocotools |
 | 影像/數值 | opencv-python、numpy |
 | 視覺化 | matplotlib |

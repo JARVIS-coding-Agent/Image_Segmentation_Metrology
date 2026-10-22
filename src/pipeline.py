@@ -77,7 +77,9 @@ def detections_to_animals(
     """將偵測結果轉為 AnimalInstance，並定位左右眼、判定可量測性。"""
     animals: list[AnimalInstance] = []
     for i, det in enumerate(detections):
-        left, right = eye_detector.detect_eyes(image, det.bbox, use_sam2=cfg.use_sam2)
+        left, right = eye_detector.detect_eyes(
+            image, det.bbox, use_sam2=cfg.use_sam2, category=det.category
+        )
         measurable = left is not None and right is not None
         reason = None if measurable else "eye_not_reliable"
         animals.append(

@@ -1,13 +1,17 @@
 """動物眼睛定位（spec 核心難點、research R2）。
 
-主要策略：頭部 ROI + 幾何/暗區啟發式（不依賴 opencv，純 numpy 以利測試）。
-- 於動物 bbox/mask 的頭部區域（預設上半部）在灰階影像找對稱的局部暗區作為左右眼候選。
-- 左右定義（config 座標慣例）：x 較小者為 left，較大者為 right（影像視角）。
-- 所有啟發式座標 is_estimated=True、source=heuristic（FR-004）。
-- 不可靠（找不到成對暗區）→ 回傳 None，由 metrology 標記為無法量測（FR-007）。
+分流策略（依動物類別）：
+- 貓（cat）：先以 OpenCV Haar frontalcatface 偵測貓臉，於臉框上半部左右各找暗點
+  作為雙眼（source=keypoint，偵測器輔助）；失敗則回退下列啟發式。
+- 其他動物：頭部 ROI + 幾何/暗區啟發式（純 numpy）。
+  於動物 bbox 頭部區域（預設上半部）在灰階影像找對稱的局部暗區作為左右眼候選。
 
-SAM2 point-prompt 精修為可選增強（use_sam2=True 時），此處提供掛鉤；
-未安裝 SAM2 時回退啟發式結果。
+共通規則：
+- 左右定義（config 座標慣例）：x 較小者為 left，較大者為 right（影像視角）。
+- 所有座標 is_estimated=True（COCO 無動物眼睛標註，皆為估計，FR-004）。
+- 不可靠（找不到成對暗區 / 貓臉）→ 回傳 None，由 metrology 標記為無法量測（FR-007）。
+
+SAM2 point-prompt 精修為可選增強（use_sam2=True 時）；未安裝 SAM2 時回退。
 """
 
 from __future__ import annotations
@@ -15,6 +19,27 @@ from __future__ import annotations
 import numpy as np
 
 from src.models import EyePoint, EyeSide, EyeSource
+
+# 視為「貓」的類別（Haar frontalcatface 僅對貓有效）
+CAT_CLASSES = {"cat"}
+
+_CAT_CASCADE = None
+
+
+def _get_cat_cascade():
+    """延遲載入 OpenCV Haar frontalcatface cascade（未裝 opencv 則回傳 None）。"""
+    global _CAT_CASCADE
+    if _CAT_CASCADE is None:
+        try:
+            import os
+
+            import cv2
+
+            path = os.path.join(cv2.data.haarcascades, "haarcascade_frontalcatface.xml")
+            _CAT_CASCADE = cv2.CascadeClassifier(path)
+        except Exception:
+            _CAT_CASCADE = False  # 標記為不可用
+    return _CAT_CASCADE or None
 
 
 def _to_gray(image: np.ndarray) -> np.ndarray:
@@ -72,16 +97,90 @@ def head_roi_bounds(
     return x0, y0, x1, y1
 
 
+def detect_eyes_catface(
+    image: np.ndarray,
+    bbox: tuple[float, float, float, float],
+) -> tuple[EyePoint | None, EyePoint | None]:
+    """以 Haar frontalcatface 偵測貓臉，於臉框上半部左右各找暗點作為雙眼。
+
+    回傳 (left_eye, right_eye)，座標為整張影像絕對像素；無法定位則 (None, None)。
+    眼睛座標仍屬估計值（is_estimated=True），來源標記為偵測器輔助（KEYPOINT）。
+    """
+    cascade = _get_cat_cascade()
+    if cascade is None:
+        return None, None
+
+    try:
+        import cv2
+    except Exception:
+        return None, None
+
+    img_h, img_w = image.shape[0], image.shape[1]
+    bx, by, bw, bh = bbox
+    # 限制在動物 bbox 範圍內搜尋貓臉
+    x0 = max(0, int(bx))
+    y0 = max(0, int(by))
+    x1 = min(img_w, int(bx + bw))
+    y1 = min(img_h, int(by + bh))
+    if x1 <= x0 or y1 <= y0:
+        return None, None
+
+    sub = image[y0:y1, x0:x1]
+    gray = sub if sub.ndim == 2 else cv2.cvtColor(sub, cv2.COLOR_RGB2GRAY)
+    gray = gray.astype(np.uint8)
+
+    faces = cascade.detectMultiScale(gray, scaleFactor=1.05, minNeighbors=3, minSize=(30, 30))
+    if len(faces) == 0:
+        return None, None
+
+    # 取最大的一張臉（對應此動物）
+    fx, fy, fw, fh = max(faces, key=lambda f: f[2] * f[3])
+
+    # 眼睛搜尋區：臉框上半偏中（y: 0.15~0.55）
+    ey0 = fy + int(0.15 * fh)
+    ey1 = fy + int(0.55 * fh)
+    roi = gray[ey0:ey1, fx:fx + fw].astype(np.float64)
+    if roi.size == 0 or roi.shape[1] < 4:
+        return None, None
+    roi = cv2.GaussianBlur(roi, (5, 5), 0)
+    h, w = roi.shape
+
+    def darkest_in(half: np.ndarray, offx: int) -> tuple[float, float]:
+        my, mx = np.unravel_index(int(np.argmin(half)), half.shape)
+        # 轉回整張影像絕對座標（sub 原點 x0,y0；臉框 fx；眼睛區 ey0）
+        return float(x0 + fx + offx + mx), float(y0 + ey0 + my)
+
+    lx, ly = darkest_in(roi[:, : w // 2], 0)
+    rx, ry = darkest_in(roi[:, w // 2 :], w // 2)
+
+    left = EyePoint(side=EyeSide.LEFT, x=lx, y=ly, is_estimated=True, source=EyeSource.KEYPOINT)
+    right = EyePoint(side=EyeSide.RIGHT, x=rx, y=ry, is_estimated=True, source=EyeSource.KEYPOINT)
+    return left, right
+
+
 def detect_eyes(
     image: np.ndarray,
     bbox: tuple[float, float, float, float],
     use_sam2: bool = False,
+    category: str | None = None,
 ) -> tuple[EyePoint | None, EyePoint | None]:
     """偵測單一動物的左右眼。
 
-    回傳 (left_eye, right_eye)；任一無法可靠定位則為 None。
-    座標為整張影像的絕對像素座標。
+    分流策略：
+    - 貓（category in CAT_CLASSES）：先用 Haar 貓臉偵測 + 臉內眼睛定位；
+      失敗則回退幾何/暗區啟發式。
+    - 其他動物：直接使用幾何/暗區啟發式。
+
+    回傳 (left_eye, right_eye)；任一無法可靠定位則為 None。座標為整張影像絕對像素。
     """
+    if category in CAT_CLASSES:
+        left, right = detect_eyes_catface(image, bbox)
+        if left is not None and right is not None:
+            if use_sam2:
+                left, right = _refine_with_sam2(image, left, right)
+            return left, right
+        # 貓臉偵測失敗 → 回退啟發式
+
     img_h, img_w = image.shape[0], image.shape[1]
     x0, y0, x1, y1 = head_roi_bounds(bbox, img_w, img_h)
     if x1 <= x0 or y1 <= y0:

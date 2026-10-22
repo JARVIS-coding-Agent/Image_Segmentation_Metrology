@@ -4,8 +4,14 @@ from __future__ import annotations
 
 import numpy as np
 
-from src.eye_detector import detect_eyes, find_dark_spots, head_roi_bounds
-from src.models import EyeSide
+from src.eye_detector import (
+    CAT_CLASSES,
+    detect_eyes,
+    detect_eyes_catface,
+    find_dark_spots,
+    head_roi_bounds,
+)
+from src.models import EyeSide, EyeSource
 
 
 def test_head_roi_bounds_top_half():
@@ -53,3 +59,36 @@ def test_detect_eyes_returns_none_when_no_dark_region():
     left, right = detect_eyes(img, bbox=(0, 0, 80, 40))
     # 均勻影像下分位數仍會切出兩群，但可能退化；至少不應拋例外
     assert (left is None) == (right is None)
+
+
+
+def test_cat_classes_contains_cat():
+    assert "cat" in CAT_CLASSES
+
+
+def test_non_cat_uses_heuristic_source():
+    # 非貓動物：使用啟發式，來源為 HEURISTIC
+    img = np.full((40, 80, 3), 220, dtype=np.uint8)
+    img[8:12, 15:19] = 10
+    img[8:12, 55:59] = 10
+    left, right = detect_eyes(img, bbox=(0, 0, 80, 40), category="dog")
+    assert left is not None and right is not None
+    assert left.source == EyeSource.HEURISTIC
+
+
+def test_catface_no_face_returns_none():
+    # 無貓臉的合成圖 → 貓臉偵測回傳 None（由 detect_eyes 回退啟發式，此處直接測 catface）
+    img = np.full((60, 60, 3), 128, dtype=np.uint8)
+    left, right = detect_eyes_catface(img, bbox=(0, 0, 60, 60))
+    assert (left is None) and (right is None)
+
+
+def test_cat_falls_back_to_heuristic_when_no_face():
+    # 貓類但找不到貓臉 → 回退啟發式仍可能定位（有對稱暗斑）
+    img = np.full((40, 80, 3), 220, dtype=np.uint8)
+    img[8:12, 15:19] = 10
+    img[8:12, 55:59] = 10
+    left, right = detect_eyes(img, bbox=(0, 0, 80, 40), category="cat")
+    # 回退啟發式：來源為 HEURISTIC（非貓臉 KEYPOINT）
+    if left is not None:
+        assert left.source == EyeSource.HEURISTIC

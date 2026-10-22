@@ -1,4 +1,4 @@
 image_id,record_type,subject_instance_id,peer_instance_id,category,left_eye_x,left_eye_y,right_eye_x,right_eye_y,peer_right_eye_x,peer_right_eye_y,distance,unit,is_estimated,low_confidence,measurable,reason
-285,eye_distance,285#0,,cat,210.5,160.2,248,162.7,,,37.58,pixel,True,False,True,
-285,eye_distance,285#1,,cat,402.1,180,441.3,181.5,,,39.23,pixel,True,False,True,
-285,inter_animal_right_eye,285#0,285#1,cat/cat,,,248,162.7,441.3,181.5,194.2,pixel,True,False,True,
+000000555705,eye_distance,000000555705#0,,cat,241,141,286,141,,,45,pixel,True,False,True,
+000000555705,eye_distance,000000555705#1,,cat,358,118,392,119,,,34.01,pixel,True,False,True,
+000000555705,inter_animal_right_eye,000000555705#0,000000555705#1,cat/cat,,,286,141,392,119,108.3,pixel,True,False,True,
