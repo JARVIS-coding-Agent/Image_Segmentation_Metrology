@@ -79,13 +79,13 @@
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T018 [P] [US2] 在 `tests/unit/test_metrology.py` 寫測量 B 單元測試：兩動物右眼距離正確性、3 隻動物產生 C(3,2)=3 筆配對、僅一隻右眼回傳不適用
+- [X] T018 [P] [US2] 在 `tests/unit/test_metrology.py` 寫測量 B 單元測試：兩動物右眼距離正確性、3 隻動物產生 C(3,2)=3 筆配對、僅一隻右眼回傳不適用
 
 ### Implementation for User Story 2
 
-- [ ] T019 [US2] 在 `src/metrology.py` 實作測量 B：`inter_animal_right_eye(Ra, Rb)=||Ra-Rb||`；依 FR-006 產生配對（2 隻→1 筆；≥3 隻→所有兩兩配對）；僅一隻右眼 → 標記「不適用（需至少兩隻右眼）」
-- [ ] T020 [US2] 在 `src/visualize.py` 擴充疊圖：標示兩動物右眼連線與距離（與 US1 配色/標籤一致）
-- [ ] T021 [US2] 在 `src/pipeline.py` 串接 US2：於同批次輸出 inter_animal_right_eye 列至 measurements.csv（共用 schema，以 record_type 區分）
+- [X] T019 [US2] 在 `src/metrology.py` 實作測量 B：`inter_animal_right_eye(Ra, Rb)=||Ra-Rb||`；依 FR-006 產生配對（2 隻→1 筆；≥3 隻→所有兩兩配對）；僅一隻右眼 → 標記「不適用（需至少兩隻右眼）」
+- [X] T020 [US2] 在 `src/visualize.py` 擴充疊圖：標示兩動物右眼連線與距離（與 US1 配色/標籤一致）
+- [X] T021 [US2] 在 `src/pipeline.py` 串接 US2：於同批次輸出 inter_animal_right_eye 列至 measurements.csv（共用 schema，以 record_type 區分）
 
 **Checkpoint**: User Story 1 與 2 皆可獨立運作
 

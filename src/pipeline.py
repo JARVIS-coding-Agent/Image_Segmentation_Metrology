@@ -119,13 +119,26 @@ def process_image(
         if not rec.measurable:
             log.warn(f"instance={a.instance_id} unmeasurable reason={rec.reason}")
 
+    # 測量 B：兩動物右眼距離（FR-006）
+    pair_records = metrology.inter_animal_right_eye(animals, scale=cfg.scale)
+    records.extend(pair_records)
+
+    # 疊圖（含測量 B 右眼配對連線）
+    by_id = {a.instance_id: a for a in animals}
+    right_eye_pairs = [
+        (by_id[r.subject_instance_id], by_id[r.peer_instance_id], r.distance)
+        for r in pair_records
+        if r.measurable and r.peer_instance_id and r.distance is not None
+    ]
+
     from src.visualize import render_overlay
 
     overlay_path = os.path.join(output_dir, "annotated", f"{image_id}.png")
-    render_overlay(image, animals, overlay_path)
+    render_overlay(image, animals, overlay_path, right_eye_pairs=right_eye_pairs)
 
-    measured = sum(1 for r in records if r.measurable)
-    log.info(f"image={image_id} measured animals={measured}/{animal_count}")
+    measured = sum(1 for r in records if r.measurable and r.record_type.value == "eye_distance")
+    pairs = sum(1 for r in pair_records if r.measurable)
+    log.info(f"image={image_id} measured animals={measured}/{animal_count} pairs={pairs}")
     img = Image(
         image_id=image_id,
         file_name=file_name,
@@ -185,8 +198,11 @@ def run(args: argparse.Namespace) -> int:
             )
             by_id = {a.instance_id: a for a in animals}
             for rec in records:
-                subj = by_id[rec.subject_instance_id]
-                rows.append(csv_writer.record_to_row(rec, subj))
+                subj = by_id.get(rec.subject_instance_id)
+                peer = by_id.get(rec.peer_instance_id) if rec.peer_instance_id else None
+                if subj is None:
+                    continue
+                rows.append(csv_writer.record_to_row(rec, subj, peer))
             processed += 1
 
     csv_path = os.path.join(cfg.output_dir, "measurements.csv")

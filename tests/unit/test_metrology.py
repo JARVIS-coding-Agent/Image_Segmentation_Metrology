@@ -6,7 +6,7 @@ import math
 
 import pytest
 
-from src.metrology import euclidean, eye_distance
+from src.metrology import euclidean, eye_distance, inter_animal_right_eye
 from src.models import AnimalInstance, DistanceUnit, EyePoint, RecordType
 
 
@@ -88,3 +88,69 @@ def test_eye_distance_propagates_low_confidence():
     )
     rec = eye_distance(a)
     assert rec.low_confidence is True
+
+
+
+def _animal_with_right(instance_id: str, rx: float, ry: float, image_id: str = "img1") -> AnimalInstance:
+    return AnimalInstance(
+        instance_id=instance_id,
+        image_id=image_id,
+        category="cat",
+        bbox=(0.0, 0.0, 100.0, 100.0),
+        confidence=0.9,
+        right_eye=EyePoint(side="right", x=rx, y=ry),
+    )
+
+
+def test_inter_animal_two_animals_one_pair():
+    animals = [
+        _animal_with_right("img1#0", 0, 0),
+        _animal_with_right("img1#1", 6, 8),
+    ]
+    recs = inter_animal_right_eye(animals)
+    assert len(recs) == 1
+    assert recs[0].record_type == RecordType.INTER_ANIMAL_RIGHT_EYE
+    assert recs[0].measurable is True
+    assert recs[0].distance == pytest.approx(10.0)
+    assert recs[0].subject_instance_id == "img1#0"
+    assert recs[0].peer_instance_id == "img1#1"
+
+
+def test_inter_animal_three_animals_three_pairs():
+    animals = [
+        _animal_with_right("img1#0", 0, 0),
+        _animal_with_right("img1#1", 3, 4),
+        _animal_with_right("img1#2", 6, 8),
+    ]
+    recs = inter_animal_right_eye(animals)
+    assert len(recs) == 3  # C(3,2)
+    assert all(r.measurable for r in recs)
+
+
+def test_inter_animal_only_one_right_eye_not_applicable():
+    animals = [
+        _animal_with_right("img1#0", 0, 0),
+        AnimalInstance(
+            instance_id="img1#1",
+            image_id="img1",
+            category="cat",
+            bbox=(0.0, 0.0, 100.0, 100.0),
+            confidence=0.9,
+            right_eye=None,
+        ),
+    ]
+    recs = inter_animal_right_eye(animals)
+    assert len(recs) == 1
+    assert recs[0].measurable is False
+    assert recs[0].distance is None
+    assert recs[0].reason == "not_applicable_need_two_right_eyes"
+
+
+def test_inter_animal_with_scale():
+    animals = [
+        _animal_with_right("img1#0", 0, 0),
+        _animal_with_right("img1#1", 10, 0),
+    ]
+    recs = inter_animal_right_eye(animals, scale=2.0)
+    assert recs[0].unit == DistanceUnit.REAL
+    assert recs[0].distance == pytest.approx(20.0)

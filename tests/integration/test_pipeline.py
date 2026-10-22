@@ -76,9 +76,30 @@ def test_csv_roundtrip_eye_distance(tmp_path):
         img, "t3", "t3.png", _two_detections(), cfg, cfg.output_dir
     )
     by_id = {a.instance_id: a for a in animals}
-    rows = [record_to_row(r, by_id[r.subject_instance_id]) for r in records]
+    rows = []
+    for r in records:
+        subj = by_id.get(r.subject_instance_id)
+        peer = by_id.get(r.peer_instance_id) if r.peer_instance_id else None
+        if subj is None:
+            continue
+        rows.append(record_to_row(r, subj, peer))
     csv_path = write_csv(rows, os.path.join(str(tmp_path), "measurements.csv"))
     assert os.path.exists(csv_path)
     content = open(csv_path, encoding="utf-8").read()
     assert "record_type" in content
     assert "eye_distance" in content
+
+
+def test_process_image_produces_inter_animal_record(tmp_path):
+    cfg = Config()
+    cfg.output_dir = str(tmp_path)
+    img = _image_with_two_animals()
+    _, animals, records = process_image(
+        img, "t4", "t4.png", _two_detections(), cfg, cfg.output_dir
+    )
+    inter = [r for r in records if r.record_type == RecordType.INTER_ANIMAL_RIGHT_EYE]
+    # 兩隻動物皆定位右眼 → 恰 1 筆且可量測；若眼睛未定位則為不適用 1 筆
+    assert len(inter) == 1
+    if all(a.right_eye is not None for a in animals):
+        assert inter[0].measurable is True
+        assert inter[0].distance is not None and inter[0].distance > 0

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import math
+from itertools import combinations
 
 from src.models import (
     AnimalInstance,
@@ -61,3 +62,52 @@ def eye_distance(animal: AnimalInstance, scale: float | None = None) -> Measurem
         measurable=True,
         low_confidence=animal.low_confidence,
     )
+
+
+
+def inter_animal_right_eye(
+    animals: list[AnimalInstance],
+    scale: float | None = None,
+) -> list[MeasurementRecord]:
+    """測量 B：兩隻動物右眼距離（FR-006）。
+
+    配對規則：
+    - 已定位右眼的動物恰 2 隻 → 1 筆。
+    - 已定位右眼的動物恰 ≥3 隻 → 所有兩兩配對 C(n,2) 筆。
+    - 僅 1 隻（或 0 隻）有右眼 → 回傳 1 筆「不適用」紀錄（measurable=False）。
+    """
+    with_right = [a for a in animals if a.right_eye is not None]
+
+    if len(with_right) < 2:
+        subject = animals[0].instance_id if animals else "unknown"
+        image_id = animals[0].image_id if animals else "unknown"
+        return [
+            MeasurementRecord(
+                record_type=RecordType.INTER_ANIMAL_RIGHT_EYE,
+                image_id=image_id,
+                subject_instance_id=subject,
+                peer_instance_id=None,
+                distance=None,
+                measurable=False,
+                reason="not_applicable_need_two_right_eyes",
+            )
+        ]
+
+    records: list[MeasurementRecord] = []
+    for a, b in combinations(with_right, 2):
+        assert a.right_eye is not None and b.right_eye is not None
+        dist_px = euclidean(a.right_eye.x, a.right_eye.y, b.right_eye.x, b.right_eye.y)
+        dist, unit = _apply_scale(dist_px, scale)
+        records.append(
+            MeasurementRecord(
+                record_type=RecordType.INTER_ANIMAL_RIGHT_EYE,
+                image_id=a.image_id,
+                subject_instance_id=a.instance_id,
+                peer_instance_id=b.instance_id,
+                distance=dist,
+                unit=unit,
+                measurable=True,
+                low_confidence=a.low_confidence or b.low_confidence,
+            )
+        )
+    return records
