@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# Secrets / env
+.env
+*.key
+*.pem
+
+# Model weights
+*.pt
+*.pth
+*.onnx
+*.weights
+weights/
+
+# Data (large / downloaded COCO subset)
+data/coco/
+data/samples/
+data/ground_truth/
+!data/.gitkeep
+
+# Outputs (generated artifacts)
+outputs/annotated/
+outputs/*.csv
+outputs/*.json
+outputs/*.md
+!outputs/measurements.csv
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
