@@ -33,6 +33,10 @@ data/coco/
 data/samples/
 data/ground_truth/
 !data/.gitkeep
+# 展示用範例輸入圖（供面試檢視）
+!data/samples/
+data/samples/*
+!data/samples/000000555705.jpg
 
 # Outputs (generated artifacts)
 outputs/annotated/
@@ -40,6 +44,12 @@ outputs/*.csv
 outputs/*.json
 outputs/*.md
 !outputs/measurements.csv
+# 展示用結果（供面試檢視）
+!outputs/eval_report.md
+!outputs/selected_images.json
+!outputs/annotated/
+outputs/annotated/*
+!outputs/annotated/000000555705.png
 
 # OS / editor
 .DS_Store
