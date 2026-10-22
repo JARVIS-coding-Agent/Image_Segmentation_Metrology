@@ -40,13 +40,13 @@
 
 ### 3. 量測每隻動物的雙眼距離（測量 A）
 
-- 公式：`D = √((x_L − x_R)² + (y_L − y_R)²)`（左眼↔右眼歐氏距離，`src/metrology.py::eye_distance`）。
+- 公式：$D = \sqrt{(x_L - x_R)^2 + (y_L - y_R)^2}$（左眼↔右眼歐氏距離，`src/metrology.py::eye_distance`）。
 - 左右眼任一無法定位 → 標記 `measurable=False` 並記錄原因，不輸出臆測值。
 - 實測（展示圖 `000000555705.jpg`）：橘貓 **45.0 px**、虎斑貓 **34.0 px**。
 
 ### 4. 量測任意兩隻動物的右眼距離（測量 B）
 
-- 公式：`D = ‖R_a − R_b‖₂`（兩動物右眼歐氏距離，`src/metrology.py::inter_animal_right_eye`）。
+- 公式：$D = \lVert R_a - R_b \rVert_2$（兩動物右眼歐氏距離，`src/metrology.py::inter_animal_right_eye`）。
 - 配對規則：恰 2 隻動物 → 1 筆；恰 ≥3 隻已定位右眼 → 所有兩兩配對 C(n,2) 筆。
 - 僅 1 隻動物有右眼 → 標記「不適用（需至少兩隻右眼）」而非報錯。
 - 實測（展示圖）：兩貓右眼距離 **108.3 px**。
@@ -58,8 +58,8 @@
 - **貓眼睛定位：OpenCV Haar `frontalcatface`（傳統 CV）+ 臉內暗點對稱定位**
   - 為什麼：COCO 無動物眼睛標註，且無單一現成模型可通用於全部動物；對正面貓臉，Haar 臉偵測能把眼睛搜尋範圍縮到臉內，比直接在整個 bbox 猜測準確許多。非貓動物回退幾何啟發式並誠實標記為估計值。
 - **評估標準公式**：
-  - 分割品質：IoU = |A∩B| / |A∪B|；Dice = 2|A∩B| / (|A|+|B|)
-  - 眼睛定位：NME = (1/N) Σ ‖p_i − p̂_i‖₂ / d_norm（以眼間距或頭框尺寸正規化）
+  - 分割品質：$\text{IoU} = \dfrac{|A \cap B|}{|A \cup B|}$；$\text{Dice} = \dfrac{2|A \cap B|}{|A| + |B|}$
+  - 眼睛定位：$\text{NME} = \dfrac{1}{N}\sum_{i=1}^{N}\dfrac{\lVert p_i - \hat{p}_i \rVert_2}{d_{norm}}$（以眼間距或頭框尺寸正規化）
   - 評估實作見 `src/evaluate.py`（`iou` / `dice` / `nme`）。
 
 ### 6. 量測方式與公式，以及如何驗證
@@ -94,14 +94,14 @@ CPU 可推論、部署容易，符合離線與效能需求。COCO 沒有動物�
 
 ### 評估公式
 
-- IoU = |A∩B| / |A∪B|
-- Dice = 2|A∩B| / (|A|+|B|)
-- NME = (1/N) Σ ‖p_i − p̂_i‖₂ / d_norm（以眼間距或頭框尺寸正規化）
+$$\text{IoU} = \frac{|A \cap B|}{|A \cup B|} \qquad \text{Dice} = \frac{2|A \cap B|}{|A| + |B|} \qquad \text{NME} = \frac{1}{N}\sum_{i=1}^{N}\frac{\lVert p_i - \hat{p}_i \rVert_2}{d_{norm}}$$
+
+（NME 以眼間距或頭框尺寸正規化。）
 
 ### 量測公式與驗證
 
-- 測量 A：D = √((x_L−x_R)² + (y_L−y_R)²)
-- 測量 B：D = ‖R_a − R_b‖₂
+- 測量 A（雙眼距離）：$D = \sqrt{(x_L - x_R)^2 + (y_L - y_R)^2}$
+- 測量 B（兩動物右眼距離）：$D = \lVert R_a - R_b \rVert_2$
 - 驗證：疊圖人工目視、≥10 張人工 ground truth 的 NME/像素誤差對照、左右眼對稱性檢查、pytest 單元測試。
 
 ## 本地運行步驟
