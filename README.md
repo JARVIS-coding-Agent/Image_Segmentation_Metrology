@@ -19,6 +19,61 @@
 - 測量 B：兩隻動物右眼↔右眼的歐氏距離（恰 2 隻→1 筆；恰 ≥3 隻→所有兩兩配對 C(n,2)）。
 - 無法可靠定位眼睛者標記「無法量測」並記錄原因，不輸出臆測值；相同輸入與設定產生相同結果。
 
+## 題目回應（逐項說明）
+
+以下對照題目六項要求，逐一說明本專案如何達成。
+
+### 1. 選用的圖片
+
+- 本次展示選用的圖片為 COCO val2017 的 **`000000555705.jpg`**（兩隻貓，正面特寫）。
+- 檔案位置：`data/samples/000000555705.jpg`（已含於 repo 供檢視）。
+- 來源：以 `src/coco_selector.py` 從 COCO val2017 篩出含 **≥2 隻動物** 的圖片（動物類別任選，涵蓋 bird/cat/dog/horse/sheep/cow/elephant/bear/zebra/giraffe；val2017 共 471 張合格，清單見 `outputs/selected_images.json`），再從中挑此張作為展示。
+
+### 2. 用 Segmentation 模型將動物輪廓 / 動物眼睛個別框出
+
+- **動物輪廓**：YOLO11-seg 實例分割，輸出每隻動物的 instance mask、bbox、類別與信心分數（`src/segmentation.py`）。
+- **動物眼睛**：COCO **沒有**動物眼睛標註，故以兩層策略定位（`src/eye_detector.py`）：
+  - 貓：OpenCV Haar `frontalcatface` 偵測貓臉 → 臉框上半部左右對稱暗點定位雙眼。
+  - 其他動物：頭部 ROI + 幾何/暗區啟發式。
+  - 所有眼睛座標標記為估計值（`is_estimated=True`）；無法可靠定位則標記「無法量測」。
+- 疊圖同時畫出 mask、左右眼（左藍右紅）與量測連線（`outputs/annotated/*.png`）。
+
+### 3. 量測每隻動物的雙眼距離（測量 A）
+
+- 公式：`D = √((x_L − x_R)² + (y_L − y_R)²)`（左眼↔右眼歐氏距離，`src/metrology.py::eye_distance`）。
+- 左右眼任一無法定位 → 標記 `measurable=False` 並記錄原因，不輸出臆測值。
+- 實測（展示圖 `000000555705.jpg`）：橘貓 **45.0 px**、虎斑貓 **34.0 px**。
+
+### 4. 量測任意兩隻動物的右眼距離（測量 B）
+
+- 公式：`D = ‖R_a − R_b‖₂`（兩動物右眼歐氏距離，`src/metrology.py::inter_animal_right_eye`）。
+- 配對規則：恰 2 隻動物 → 1 筆；恰 ≥3 隻已定位右眼 → 所有兩兩配對 C(n,2) 筆。
+- 僅 1 隻動物有右眼 → 標記「不適用（需至少兩隻右眼）」而非報錯。
+- 實測（展示圖）：兩貓右眼距離 **108.3 px**。
+
+### 5. 使用什麼 AI 模型、為什麼、評估標準公式
+
+- **動物輪廓分割：Ultralytics YOLO11-seg（COCO 預訓練）**
+  - 為什麼：COCO 80 類預訓練直接涵蓋常見動物，一次推論即取得類別 / bbox / instance mask / 信心分數；CPU 可推論、部署容易，符合離線與效能需求。
+- **貓眼睛定位：OpenCV Haar `frontalcatface`（傳統 CV）+ 臉內暗點對稱定位**
+  - 為什麼：COCO 無動物眼睛標註，且無單一現成模型可通用於全部動物；對正面貓臉，Haar 臉偵測能把眼睛搜尋範圍縮到臉內，比直接在整個 bbox 猜測準確許多。非貓動物回退幾何啟發式並誠實標記為估計值。
+- **評估標準公式**：
+  - 分割品質：IoU = |A∩B| / |A∪B|；Dice = 2|A∩B| / (|A|+|B|)
+  - 眼睛定位：NME = (1/N) Σ ‖p_i − p̂_i‖₂ / d_norm（以眼間距或頭框尺寸正規化）
+  - 評估實作見 `src/evaluate.py`（`iou` / `dice` / `nme`）。
+
+### 6. 量測方式與公式，以及如何驗證
+
+- **量測方式**：於像素座標（原點左上、x 向右、y 向下）計算歐氏距離；左右眼以影像視角的 x 位置區分（x 小者為左眼）。預設單位為像素，提供比例尺時可換算實際單位。
+- **驗證方式**（四層）：
+  1. **疊圖人工目視**：`outputs/annotated/*.png` 檢查左右眼標記、連線與數值是否合理。
+  2. **ground truth 對照**：對 ≥10 張人工標註眼睛，計算 NME / 像素誤差（`--eval`）。
+  3. **一致性檢查**：左右眼對稱性、雙眼距與頭框尺寸比例合理性。
+  4. **單元測試**：`pytest` 對距離公式與評估公式的已知座標驗證數學正確性（39 測試通過，metrology/evaluate 覆蓋率 ≥ 80%）。
+- **效能與決定性**：單張 CPU P95 ≤ 5s（實測記錄於 `outputs/eval_report.md`）；固定種子與 pinned 版本，相同輸入產生相同結果。
+
+> 展示結果：輸入 `data/samples/000000555705.jpg`、疊圖 `outputs/annotated/000000555705.png`、量測 `outputs/measurements.csv`、報告 `outputs/eval_report.md`。
+
 ## 技術棧
 
 | 項目 | 技術 |
