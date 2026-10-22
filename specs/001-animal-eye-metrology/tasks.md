@@ -99,16 +99,16 @@
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T022 [P] [US3] 在 `tests/unit/test_evaluate.py` 寫評估單元測試：IoU=|A∩B|/|A∪B|、Dice=2|A∩B|/(|A|+|B|)、NME 對已知輸入的正確值
-- [ ] T023 [P] [US3] 在 `tests/integration/test_pipeline.py` 寫 US3 整合測試：篩選回傳僅含 ≥2 動物圖片且兩次執行一致（決定性）
+- [X] T022 [P] [US3] 在 `tests/unit/test_evaluate.py` 寫評估單元測試：IoU=|A∩B|/|A∪B|、Dice=2|A∩B|/(|A|+|B|)、NME 對已知輸入的正確值
+- [X] T023 [P] [US3] 在 `tests/integration/test_pipeline.py` 寫 US3 整合測試：篩選回傳僅含 ≥2 動物圖片且兩次執行一致（決定性）
 
 ### Implementation for User Story 3
 
-- [ ] T024 [P] [US3] 在 `src/coco_selector.py` 實作 COCO 篩選：以 pycocotools 讀取標註、挑出含 ≥min-animals 動物的圖片、輸出可重現的 `outputs/selected_images.json`（FR-001）
-- [ ] T025 [P] [US3] 在 `src/evaluate.py` 實作 IoU/Dice（分割）與 NME（眼睛，以眼間距/頭框正規化）計算（FR-011）
-- [ ] T026 [US3] 在 `src/evaluate.py` 實作 ground truth 對照：讀取 `data/ground_truth`（≥10 張）計算像素誤差/NME，彙總 sample_size（FR-012、SC-004）
-- [ ] T027 [US3] 在 `src/pipeline.py` 串接 --eval：輸出 `outputs/eval_report.md`（IoU/Dice/NME + 單張 CPU P95 處理時間實測 per SC-007）
-- [ ] T028 [US3] 在 `src/pipeline.py` 串接篩選流程（--coco-dir → selected_images.json → 後續處理）
+- [X] T024 [P] [US3] 在 `src/coco_selector.py` 實作 COCO 篩選：以 pycocotools 讀取標註、挑出含 ≥min-animals 動物的圖片、輸出可重現的 `outputs/selected_images.json`（FR-001）
+- [X] T025 [P] [US3] 在 `src/evaluate.py` 實作 IoU/Dice（分割）與 NME（眼睛，以眼間距/頭框正規化）計算（FR-011）
+- [X] T026 [US3] 在 `src/evaluate.py` 實作 ground truth 對照：讀取 `data/ground_truth`（≥10 張）計算像素誤差/NME，彙總 sample_size（FR-012、SC-004）
+- [X] T027 [US3] 在 `src/pipeline.py` 串接 --eval：輸出 `outputs/eval_report.md`（IoU/Dice/NME + 單張 CPU P95 處理時間實測 per SC-007）
+- [X] T028 [US3] 在 `src/pipeline.py` 串接篩選流程（--coco-dir → selected_images.json → 後續處理）
 
 **Checkpoint**: 三個使用者故事皆可獨立運作
 

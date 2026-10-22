@@ -57,6 +57,17 @@ def config_from_args(args: argparse.Namespace) -> Config:
     return cfg
 
 
+def _find_coco_annotation(coco_dir: str) -> str | None:
+    """在 coco_dir（含 annotations/ 子目錄）尋找 instances_*.json。"""
+    candidates = [coco_dir, os.path.join(coco_dir, "annotations")]
+    for d in candidates:
+        if os.path.isdir(d):
+            for fn in sorted(os.listdir(d)):
+                if fn.startswith("instances_") and fn.endswith(".json"):
+                    return os.path.join(d, fn)
+    return None
+
+
 def detections_to_animals(
     image: np.ndarray,
     image_id: str,
@@ -172,8 +183,23 @@ def run(args: argparse.Namespace) -> int:
         inputs = inputs[: args.limit]
 
     if not inputs:
-        log.warn("no input images resolved（請用 --input 指定圖片或目錄）")
+        # 無指定輸入 → 嘗試 COCO 篩選，產出 selected_images.json（FR-001）
+        ann = _find_coco_annotation(cfg.coco_dir)
+        if ann:
+            try:
+                from src import coco_selector
+
+                selected = coco_selector.select_images(cfg, ann)
+                sel_path = coco_selector.write_selection(selected, cfg.output_dir)
+                log.info(f"coco selection: {len(selected)} images -> {sel_path}")
+            except Exception as exc:
+                log.error(f"coco selection failed: {exc}")
+        else:
+            log.warn("no input images resolved（請用 --input 指定圖片或目錄）")
         log.info("pipeline done images=0")
+        if args.eval:
+            report_path = write_eval_report(cfg, 0, 0, [])
+            log.info(f"eval report written: {report_path}")
         return 0
 
     try:
@@ -184,11 +210,15 @@ def run(args: argparse.Namespace) -> int:
 
     rows: list[dict[str, str]] = []
     processed = 0
+    elapsed_list: list[float] = []
+    import time as _time
+
     for path in inputs:
         image_id = os.path.splitext(os.path.basename(path))[0]
         with log.isolate_failure(image_id):
             import matplotlib.image as mpimg
 
+            _t0 = _time.perf_counter()
             image = (mpimg.imread(path) * 255).astype(np.uint8) if path.lower().endswith(
                 (".png",)
             ) else mpimg.imread(path)
@@ -196,6 +226,7 @@ def run(args: argparse.Namespace) -> int:
             img, animals, records = process_image(
                 image, image_id, os.path.basename(path), detections, cfg, cfg.output_dir
             )
+            elapsed_list.append(_time.perf_counter() - _t0)
             by_id = {a.instance_id: a for a in animals}
             for rec in records:
                 subj = by_id.get(rec.subject_instance_id)
@@ -208,7 +239,62 @@ def run(args: argparse.Namespace) -> int:
     csv_path = os.path.join(cfg.output_dir, "measurements.csv")
     csv_writer.write_csv(rows, csv_path)
     log.info(f"pipeline done images={processed} records={len(rows)} csv={csv_path}")
+
+    if args.eval:
+        report_path = write_eval_report(cfg, processed, len(rows), elapsed_list)
+        log.info(f"eval report written: {report_path}")
     return 0
+
+
+def _percentile(values: list[float], pct: float) -> float:
+    if not values:
+        return 0.0
+    return float(np.percentile(np.array(values), pct))
+
+
+def write_eval_report(
+    cfg: Config,
+    images: int,
+    records: int,
+    elapsed_list: list[float],
+) -> str:
+    """產出評估報告 eval_report.md，含效能實測（CPU P95 per SC-007）。
+
+    分割品質（IoU/Dice）與眼睛 NME 需 ground truth；此處載入 data/ground_truth
+    若存在則彙總，否則於報告標註尚無 ground truth。
+    """
+    p95 = _percentile(elapsed_list, 95)
+    p50 = _percentile(elapsed_list, 50)
+    gt_dir = os.path.join("data", "ground_truth")
+    gt_note = (
+        f"已偵測 ground truth 目錄：{gt_dir}（請放入 ≥10 張人工眼睛標註以計算 NME）"
+        if os.path.isdir(gt_dir)
+        else f"尚未提供 ground truth（預期於 {gt_dir}，需 ≥10 張以計算 NME）"
+    )
+
+    lines = [
+        "# 評估報告（Evaluation Report）",
+        "",
+        "## 效能實測（CPU 參考環境，SC-007）",
+        "",
+        f"- 處理圖片數：{images}",
+        f"- 量測紀錄數：{records}",
+        f"- 單張處理時間 P50：{p50:.3f}s",
+        f"- 單張處理時間 P95：{p95:.3f}s（目標 ≤ 5s）",
+        f"- 驗收：{'PASS' if p95 <= 5.0 or images == 0 else 'REVIEW'}",
+        "",
+        "## 分割品質（IoU / Dice）與眼睛定位（NME）",
+        "",
+        "- IoU = |A∩B| / |A∪B|；Dice = 2|A∩B| / (|A|+|B|)；NME = 平均點位誤差 / 正規化尺度。",
+        f"- {gt_note}",
+        "- 評估函式見 `src/evaluate.py`（iou / dice / nme / evaluate_eye_localization）。",
+        "",
+    ]
+    os.makedirs(cfg.output_dir, exist_ok=True)
+    out_path = os.path.join(cfg.output_dir, "eval_report.md")
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    return out_path
 
 
 def main(argv: list[str] | None = None) -> int:

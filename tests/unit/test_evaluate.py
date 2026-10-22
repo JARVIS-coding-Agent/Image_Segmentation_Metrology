@@ -1,0 +1,74 @@
+"""evaluate 單元測試：IoU / Dice / NME（純 numpy，已知輸入）。"""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from src.evaluate import dice, evaluate_eye_localization, iou, nme
+
+
+def test_iou_identical_masks():
+    a = np.array([[1, 1], [0, 0]], dtype=bool)
+    assert iou(a, a) == pytest.approx(1.0)
+
+
+def test_iou_half_overlap():
+    a = np.array([[1, 1], [0, 0]], dtype=bool)
+    b = np.array([[1, 0], [1, 0]], dtype=bool)
+    # 交集=1 (左上), 聯集=3 -> 1/3
+    assert iou(a, b) == pytest.approx(1.0 / 3.0)
+
+
+def test_iou_empty_union_zero():
+    a = np.zeros((2, 2), dtype=bool)
+    assert iou(a, a) == 0.0
+
+
+def test_dice_identical():
+    a = np.array([[1, 1], [1, 0]], dtype=bool)
+    assert dice(a, a) == pytest.approx(1.0)
+
+
+def test_dice_half_overlap():
+    a = np.array([[1, 1], [0, 0]], dtype=bool)
+    b = np.array([[1, 0], [1, 0]], dtype=bool)
+    # 2*交集(1) / (面積和 2+2=4) = 0.5
+    assert dice(a, b) == pytest.approx(0.5)
+
+
+def test_dice_empty_zero():
+    a = np.zeros((2, 2), dtype=bool)
+    assert dice(a, a) == 0.0
+
+
+def test_nme_zero_when_perfect():
+    pred = [(0.0, 0.0), (10.0, 0.0)]
+    gt = [(0.0, 0.0), (10.0, 0.0)]
+    assert nme(pred, gt, d_norm=10.0) == pytest.approx(0.0)
+
+
+def test_nme_known_value():
+    pred = [(3.0, 4.0)]   # 誤差 5
+    gt = [(0.0, 0.0)]
+    assert nme(pred, gt, d_norm=10.0) == pytest.approx(0.5)
+
+
+def test_nme_length_mismatch_raises():
+    with pytest.raises(ValueError):
+        nme([(0.0, 0.0)], [], d_norm=1.0)
+
+
+def test_nme_bad_dnorm_raises():
+    with pytest.raises(ValueError):
+        nme([(0.0, 0.0)], [(1.0, 1.0)], d_norm=0.0)
+
+
+def test_evaluate_eye_localization_result():
+    res = evaluate_eye_localization(
+        [(3.0, 4.0)], [(0.0, 0.0)], d_norm=10.0, gt_source="manual"
+    )
+    assert res.metric == "NME"
+    assert res.scope == "eye_localization"
+    assert res.value == pytest.approx(0.5)
+    assert res.sample_size == 1
