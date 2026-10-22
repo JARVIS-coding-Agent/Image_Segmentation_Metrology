@@ -47,3 +47,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# spec-kit 工具內部檔（不納入交付；本機保留供開發）
+.specify/
+.kiro/
