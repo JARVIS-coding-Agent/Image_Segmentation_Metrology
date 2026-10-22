@@ -24,11 +24,11 @@
 
 **Purpose**: 專案初始化與基本結構
 
-- [ ] T001 建立專案目錄結構（src/、tests/unit/、tests/integration/、data/{coco,samples,ground_truth}/、outputs/{annotated}/、docs/）per plan.md
-- [ ] T002 建立 `requirements.txt`，以 pinned 版本列出 python 3.11 相依：ultralytics、pycocotools、opencv-python、numpy、matplotlib、pydantic、pandas、pytest（SAM2/segment-anything 列為可選 extra）
-- [ ] T003 [P] 建立 `.env.example`，含 COCO 路徑、模型權重路徑、信心閾值、種子等環境變數範例
-- [ ] T004 [P] 設定 linting/formatting 工具（ruff + black）設定檔於 repo 根（pyproject.toml 或對應設定）
-- [ ] T005 [P] 建立 `pytest` 設定（pyproject.toml 或 pytest.ini），設定 tests/ 探索路徑與覆蓋率門檻（metrology/evaluate ≥ 80%）
+- [X] T001 建立專案目錄結構（src/、tests/unit/、tests/integration/、data/{coco,samples,ground_truth}/、outputs/{annotated}/、docs/）per plan.md
+- [X] T002 建立 `requirements.txt`，以 pinned 版本列出 python 3.11 相依：ultralytics、pycocotools、opencv-python、numpy、matplotlib、pydantic、pandas、pytest（SAM2/segment-anything 列為可選 extra）
+- [X] T003 [P] 建立 `.env.example`，含 COCO 路徑、模型權重路徑、信心閾值、種子等環境變數範例
+- [X] T004 [P] 設定 linting/formatting 工具（ruff + black）設定檔於 repo 根（pyproject.toml 或對應設定）
+- [X] T005 [P] 建立 `pytest` 設定（pyproject.toml 或 pytest.ini），設定 tests/ 探索路徑與覆蓋率門檻（metrology/evaluate ≥ 80%）
 
 ---
 
@@ -38,10 +38,10 @@
 
 **⚠️ CRITICAL**: 本階段完成前，任何使用者故事不得開工
 
-- [ ] T006 [P] 在 `src/config.py` 實作設定：動物類別清單（COCO 動物類別）、分割信心閾值（預設 0.25）、路徑、隨機種子（預設 42）、距離單位（預設 pixel）、座標慣例常數
-- [ ] T007 在 `src/models.py` 以 pydantic 實作資料模型：`Image`、`AnimalInstance`、`EyePoint`、`MeasurementRecord`、`EvaluationResult`，欄位與驗證規則依 data-model.md（如 EyePoint.side ∈ {left,right}；x 滿足 0 ≤ x < width；y 滿足 0 ≤ y < height；is_estimated 布林；MeasurementRecord.record_type ∈ {eye_distance, inter_animal_right_eye}；unit ∈ {pixel, real, normalized}）
-- [ ] T008 [P] 在 `src/config.py` 或 `src/logging_utils.py` 設定錯誤處理與日誌基礎（單張失敗隔離續跑、標準輸出訊息格式 per contracts/cli.md，如 `[skip]/[warn]/[info]`）
-- [ ] T009 在 `src/pipeline.py` 建立 CLI 進入點骨架與旗標解析（per contracts/cli.md：--coco-dir/--input/--output-dir/--min-animals/--conf-threshold/--use-sam2/--scale/--seed/--eval/--limit），固定種子、退出碼 0=批次完成 / 非 0=啟動期失敗
+- [X] T006 [P] 在 `src/config.py` 實作設定：動物類別清單（COCO 動物類別）、分割信心閾值（預設 0.25）、路徑、隨機種子（預設 42）、距離單位（預設 pixel）、座標慣例常數
+- [X] T007 在 `src/models.py` 以 pydantic 實作資料模型：`Image`、`AnimalInstance`、`EyePoint`、`MeasurementRecord`、`EvaluationResult`，欄位與驗證規則依 data-model.md（如 EyePoint.side ∈ {left,right}；x 滿足 0 ≤ x < width；y 滿足 0 ≤ y < height；is_estimated 布林；MeasurementRecord.record_type ∈ {eye_distance, inter_animal_right_eye}；unit ∈ {pixel, real, normalized}）
+- [X] T008 [P] 在 `src/config.py` 或 `src/logging_utils.py` 設定錯誤處理與日誌基礎（單張失敗隔離續跑、標準輸出訊息格式 per contracts/cli.md，如 `[skip]/[warn]/[info]`）
+- [X] T009 在 `src/pipeline.py` 建立 CLI 進入點骨架與旗標解析（per contracts/cli.md：--coco-dir/--input/--output-dir/--min-animals/--conf-threshold/--use-sam2/--scale/--seed/--eval/--limit），固定種子、退出碼 0=批次完成 / 非 0=啟動期失敗
 
 **Checkpoint**: 基礎就緒——使用者故事可開始
 
