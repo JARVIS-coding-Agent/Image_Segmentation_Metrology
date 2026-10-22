@@ -1,16 +1,22 @@
 """端到端 pipeline CLI 進入點（contracts/cli.md）。
 
 退出碼：0 = 批次完成（即使部分圖片 skip/unmeasurable）；非 0 = 啟動期失敗。
-後續階段（US1/US2/US3）會逐步填入 run() 的各處理步驟。
+US1：分割 → 眼睛定位 → 測量 A → 疊圖 → CSV。US2/US3 後續填入。
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
+import numpy as np
+
+from src import csv_writer, eye_detector, metrology
 from src import logging_utils as log
 from src.config import Config, set_deterministic
+from src.models import AnimalInstance, Image, ImageStatus, MeasurementRecord
+from src.segmentation import AnimalSegmenter, Detection
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -51,6 +57,86 @@ def config_from_args(args: argparse.Namespace) -> Config:
     return cfg
 
 
+def detections_to_animals(
+    image: np.ndarray,
+    image_id: str,
+    detections: list[Detection],
+    cfg: Config,
+) -> list[AnimalInstance]:
+    """將偵測結果轉為 AnimalInstance，並定位左右眼、判定可量測性。"""
+    animals: list[AnimalInstance] = []
+    for i, det in enumerate(detections):
+        left, right = eye_detector.detect_eyes(image, det.bbox, use_sam2=cfg.use_sam2)
+        measurable = left is not None and right is not None
+        reason = None if measurable else "eye_not_reliable"
+        animals.append(
+            AnimalInstance(
+                instance_id=f"{image_id}#{i}",
+                image_id=image_id,
+                category=det.category,
+                bbox=det.bbox,
+                confidence=det.confidence,
+                low_confidence=det.low_confidence,
+                left_eye=left,
+                right_eye=right,
+                measurable=measurable,
+                unmeasurable_reason=reason,
+            )
+        )
+    return animals
+
+
+def process_image(
+    image: np.ndarray,
+    image_id: str,
+    file_name: str,
+    detections: list[Detection],
+    cfg: Config,
+    output_dir: str,
+) -> tuple[Image, list[AnimalInstance], list[MeasurementRecord]]:
+    """處理單張影像的 US1 流程：篩選門檻 → 眼睛定位 → 測量 A → 疊圖。"""
+    h, w = image.shape[0], image.shape[1]
+    animal_count = len(detections)
+
+    if animal_count < cfg.min_animals:
+        log.skip(f"image={image_id} reason=insufficient_animals (count={animal_count})")
+        img = Image(
+            image_id=image_id,
+            file_name=file_name,
+            width=w,
+            height=h,
+            animal_count=animal_count,
+            status=ImageStatus.SKIPPED_INSUFFICIENT_ANIMALS,
+            reason=f"count={animal_count} < min_animals={cfg.min_animals}",
+        )
+        return img, [], []
+
+    animals = detections_to_animals(image, image_id, detections, cfg)
+    records: list[MeasurementRecord] = []
+    for a in animals:
+        rec = metrology.eye_distance(a, scale=cfg.scale)
+        records.append(rec)
+        if not rec.measurable:
+            log.warn(f"instance={a.instance_id} unmeasurable reason={rec.reason}")
+
+    from src.visualize import render_overlay
+
+    overlay_path = os.path.join(output_dir, "annotated", f"{image_id}.png")
+    render_overlay(image, animals, overlay_path)
+
+    measured = sum(1 for r in records if r.measurable)
+    log.info(f"image={image_id} measured animals={measured}/{animal_count}")
+    img = Image(
+        image_id=image_id,
+        file_name=file_name,
+        width=w,
+        height=h,
+        animal_count=animal_count,
+        status=ImageStatus.OK,
+    )
+    return img, animals, records
+
+
 def run(args: argparse.Namespace) -> int:
     """執行 pipeline。回傳退出碼。"""
     cfg = config_from_args(args)
@@ -59,8 +145,53 @@ def run(args: argparse.Namespace) -> int:
         f"pipeline start coco_dir={cfg.coco_dir} min_animals={cfg.min_animals} "
         f"seed={cfg.seed} use_sam2={cfg.use_sam2} eval={args.eval}"
     )
-    # US1/US2/US3 階段將於此串接：篩選 → 分割 → 眼睛定位 → 測量 → 評估 → 視覺化 → CSV
-    log.info("pipeline scaffold ready（處理步驟將於後續階段填入）")
+
+    # 收集輸入影像路徑
+    inputs: list[str] = []
+    if args.input and os.path.isdir(args.input):
+        for fn in sorted(os.listdir(args.input)):
+            if fn.lower().endswith((".jpg", ".jpeg", ".png")):
+                inputs.append(os.path.join(args.input, fn))
+    elif args.input and os.path.isfile(args.input):
+        inputs.append(args.input)
+
+    if args.limit is not None:
+        inputs = inputs[: args.limit]
+
+    if not inputs:
+        log.warn("no input images resolved（請用 --input 指定圖片或目錄）")
+        log.info("pipeline done images=0")
+        return 0
+
+    try:
+        segmenter = AnimalSegmenter(cfg)
+    except Exception as exc:  # 啟動期失敗
+        log.error(f"failed to init segmenter: {exc}")
+        return 2
+
+    rows: list[dict[str, str]] = []
+    processed = 0
+    for path in inputs:
+        image_id = os.path.splitext(os.path.basename(path))[0]
+        with log.isolate_failure(image_id):
+            import matplotlib.image as mpimg
+
+            image = (mpimg.imread(path) * 255).astype(np.uint8) if path.lower().endswith(
+                (".png",)
+            ) else mpimg.imread(path)
+            detections = segmenter.segment(image)
+            img, animals, records = process_image(
+                image, image_id, os.path.basename(path), detections, cfg, cfg.output_dir
+            )
+            by_id = {a.instance_id: a for a in animals}
+            for rec in records:
+                subj = by_id[rec.subject_instance_id]
+                rows.append(csv_writer.record_to_row(rec, subj))
+            processed += 1
+
+    csv_path = os.path.join(cfg.output_dir, "measurements.csv")
+    csv_writer.write_csv(rows, csv_path)
+    log.info(f"pipeline done images={processed} records={len(rows)} csv={csv_path}")
     return 0
 
 

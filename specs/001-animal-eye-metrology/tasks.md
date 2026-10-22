@@ -55,17 +55,17 @@
 
 ### Tests for User Story 1 ⚠️（先寫並確認失敗）
 
-- [ ] T010 [P] [US1] 在 `tests/unit/test_metrology.py` 寫雙眼距離（測量 A）單元測試：已知座標的歐氏距離、重合點零距離、缺眼回傳不可量測
-- [ ] T011 [P] [US1] 在 `tests/integration/test_pipeline.py` 寫 US1 整合測試：固定小樣本圖片 → 產出含 eye_distance 列的 CSV 與疊圖檔
+- [X] T010 [P] [US1] 在 `tests/unit/test_metrology.py` 寫雙眼距離（測量 A）單元測試：已知座標的歐氏距離、重合點零距離、缺眼回傳不可量測
+- [X] T011 [P] [US1] 在 `tests/integration/test_pipeline.py` 寫 US1 整合測試：固定小樣本圖片 → 產出含 eye_distance 列的 CSV 與疊圖檔
 
 ### Implementation for User Story 1
 
-- [ ] T012 [P] [US1] 在 `src/segmentation.py` 實作 YOLO11-seg 分割：載入 COCO 預訓練權重、對影像推論、回傳每隻動物的 category/bbox/mask/confidence（low_confidence 標記 per FR-013）
-- [ ] T013 [P] [US1] 在 `src/eye_detector.py` 實作眼睛定位主策略（頭部 mask + 幾何/暗區啟發式 per research R2）：於頭部 ROI 找對稱暗區作左右眼候選，x 小者為 left、大者為 right，產生 EyePoint（is_estimated=True, source=heuristic）；不可靠時回傳 None 並附原因
-- [ ] T014 [US1] 在 `src/eye_detector.py` 加入可選 SAM2 point-prompt 精修（--use-sam2 時啟用，預設關閉，source=sam2），失敗則回退啟發式
-- [ ] T015 [US1] 在 `src/metrology.py` 實作測量 A：`eye_distance(left, right) = sqrt((xL-xR)^2+(yL-yR)^2)`；左右眼任一為 None → 回傳 measurable=False 與 reason（FR-005、FR-007）
-- [ ] T016 [US1] 在 `src/visualize.py` 實作疊圖：畫 mask、左右眼點（一致配色區分左右）、連線與距離數值，輸出 `outputs/annotated/<image_id>.png`（FR-008、constitution III）
-- [ ] T017 [US1] 在 `src/pipeline.py` 串接 US1 流程（分割 → 眼睛定位 → 測量 A → 疊圖 → 寫入 measurements.csv 的 eye_distance 列 per contracts/measurements-csv.md），單張失敗隔離續跑
+- [X] T012 [P] [US1] 在 `src/segmentation.py` 實作 YOLO11-seg 分割：載入 COCO 預訓練權重、對影像推論、回傳每隻動物的 category/bbox/mask/confidence（low_confidence 標記 per FR-013）
+- [X] T013 [P] [US1] 在 `src/eye_detector.py` 實作眼睛定位主策略（頭部 mask + 幾何/暗區啟發式 per research R2）：於頭部 ROI 找對稱暗區作左右眼候選，x 小者為 left、大者為 right，產生 EyePoint（is_estimated=True, source=heuristic）；不可靠時回傳 None 並附原因
+- [X] T014 [US1] 在 `src/eye_detector.py` 加入可選 SAM2 point-prompt 精修（--use-sam2 時啟用，預設關閉，source=sam2），失敗則回退啟發式
+- [X] T015 [US1] 在 `src/metrology.py` 實作測量 A：`eye_distance(left, right) = sqrt((xL-xR)^2+(yL-yR)^2)`；左右眼任一為 None → 回傳 measurable=False 與 reason（FR-005、FR-007）
+- [X] T016 [US1] 在 `src/visualize.py` 實作疊圖：畫 mask、左右眼點（一致配色區分左右）、連線與距離數值，輸出 `outputs/annotated/<image_id>.png`（FR-008、constitution III）
+- [X] T017 [US1] 在 `src/pipeline.py` 串接 US1 流程（分割 → 眼睛定位 → 測量 A → 疊圖 → 寫入 measurements.csv 的 eye_distance 列 per contracts/measurements-csv.md），單張失敗隔離續跑
 
 **Checkpoint**: User Story 1 可獨立運作並測試（MVP）
 
