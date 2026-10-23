@@ -73,3 +73,36 @@ def evaluate_eye_localization(
         gt_source=gt_source,
         sample_size=len(predicted),
     )
+
+
+def evaluate_segmentation(
+    pred_masks: list[np.ndarray],
+    gt_masks: list[np.ndarray],
+    gt_source: str = "coco",
+) -> list[EvaluationResult]:
+    """以 ground truth mask 對照分割預測，實際計算 IoU 與 Dice（P0-A / M-7）。
+
+    pred_masks / gt_masks 為等尺寸的二值遮罩清單（通常為每張圖的聯集 mask）。
+    回傳 [IoU 結果, Dice 結果]，value 為所有樣本平均；sample_size 為樣本數。
+    """
+    n = min(len(pred_masks), len(gt_masks))
+    if n == 0:
+        return []
+    iou_vals = [iou(pred_masks[i], gt_masks[i]) for i in range(n)]
+    dice_vals = [dice(pred_masks[i], gt_masks[i]) for i in range(n)]
+    return [
+        EvaluationResult(
+            metric="IoU",
+            scope="segmentation",
+            value=float(np.mean(iou_vals)),
+            gt_source=gt_source,
+            sample_size=n,
+        ),
+        EvaluationResult(
+            metric="Dice",
+            scope="segmentation",
+            value=float(np.mean(dice_vals)),
+            gt_source=gt_source,
+            sample_size=n,
+        ),
+    ]
