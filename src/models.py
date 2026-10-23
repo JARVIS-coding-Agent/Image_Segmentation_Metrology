@@ -58,7 +58,10 @@ class AnimalInstance(BaseModel):
     category: str
     bbox: tuple[float, float, float, float]  # x, y, w, h
     mask_ref: str | None = None
-    mask: Any = None  # HxW numpy 遮罩（0/1 或布林）；不序列化，供疊圖使用（P0-B）
+    # HxW numpy 遮罩（0/1 或布林），供疊圖與 IoU/Dice 使用（P0-B）。
+    # exclude=True 讓 pydantic 明確排除序列化（不進 CSV / model_dump），
+    # 而非僅靠註解約定。
+    mask: Any = Field(default=None, exclude=True)
     confidence: float = Field(ge=0.0, le=1.0)
     low_confidence: bool = False
     left_eye: EyePoint | None = None

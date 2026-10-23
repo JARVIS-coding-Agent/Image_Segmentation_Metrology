@@ -56,6 +56,15 @@ class CocoGroundTruth:
             m = self._coco.annToMask(ann).astype(bool)
             if m.shape == union.shape:
                 union |= m
+            else:
+                # annToMask 理論上與影像 h/w 一致；若不符代表 annotation 與 image
+                # metadata 有落差，靜默跳過會讓 GT 少算、IoU 虛高。明確警告。
+                from src import logging_utils as _log
+
+                _log.warn(
+                    f"coco gt mask shape mismatch image_id={img_id} "
+                    f"ann={m.shape} img=({h}, {w}); skip this annotation"
+                )
         return union
 
 
