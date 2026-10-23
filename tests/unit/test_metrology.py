@@ -80,6 +80,20 @@ def test_eye_distance_with_scale_real_unit():
     assert rec.distance == pytest.approx(5.0)
 
 
+def test_eye_distance_scale_zero_raises():
+    # M-1：scale=0 為無效比例尺，應拋 ValueError（而非被當成 pixel）
+    a = _animal(EyePoint(side="left", x=0, y=0), EyePoint(side="right", x=10, y=0))
+    with pytest.raises(ValueError):
+        eye_distance(a, scale=0)
+
+
+def test_eye_distance_scale_none_is_pixel():
+    a = _animal(EyePoint(side="left", x=0, y=0), EyePoint(side="right", x=10, y=0))
+    rec = eye_distance(a, scale=None)
+    assert rec.unit == DistanceUnit.PIXEL
+    assert rec.distance == pytest.approx(10.0)
+
+
 def test_eye_distance_propagates_low_confidence():
     a = _animal(
         EyePoint(side="left", x=0, y=0),

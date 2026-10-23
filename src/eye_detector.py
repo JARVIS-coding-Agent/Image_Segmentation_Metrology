@@ -23,13 +23,19 @@ from src.models import EyePoint, EyeSide, EyeSource
 # 視為「貓」的類別（Haar frontalcatface 僅對貓有效）
 CAT_CLASSES = {"cat"}
 
-_CAT_CASCADE = None
+_CAT_CASCADE = None          # 載入後的 cascade；None 表示不可用
+_CAT_CASCADE_LOADED = False  # 是否已嘗試載入（M-3）
 
 
 def _get_cat_cascade():
-    """延遲載入 OpenCV Haar frontalcatface cascade（未裝 opencv 則回傳 None）。"""
-    global _CAT_CASCADE
-    if _CAT_CASCADE is None:
+    """延遲載入 OpenCV Haar frontalcatface cascade（未裝 opencv 則回傳 None）。
+
+    M-3：以 ``_CAT_CASCADE_LOADED`` 旗標記錄「是否已嘗試載入」，
+    快取結果以 None 表示不可用，避免用 ``False`` sentinel + ``or None`` 的模糊寫法。
+    """
+    global _CAT_CASCADE, _CAT_CASCADE_LOADED
+    if not _CAT_CASCADE_LOADED:
+        _CAT_CASCADE_LOADED = True
         try:
             import os
 
@@ -38,8 +44,8 @@ def _get_cat_cascade():
             path = os.path.join(cv2.data.haarcascades, "haarcascade_frontalcatface.xml")
             _CAT_CASCADE = cv2.CascadeClassifier(path)
         except Exception:
-            _CAT_CASCADE = False  # 標記為不可用
-    return _CAT_CASCADE or None
+            _CAT_CASCADE = None  # 不可用
+    return _CAT_CASCADE
 
 
 def _to_gray(image: np.ndarray) -> np.ndarray:

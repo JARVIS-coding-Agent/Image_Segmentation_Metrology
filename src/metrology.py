@@ -25,10 +25,18 @@ def euclidean(x1: float, y1: float, x2: float, y2: float) -> float:
 
 
 def _apply_scale(distance_px: float, scale: float | None) -> tuple[float, DistanceUnit]:
-    """依比例尺換算距離與單位。無比例尺則回傳像素。"""
-    if scale:
-        return distance_px * scale, DistanceUnit.REAL
-    return distance_px, DistanceUnit.PIXEL
+    """依比例尺換算距離與單位。
+
+    M-1：明確判別 ``scale is None``（未提供）與 ``scale == 0``（無效值）：
+    - None → 以像素為單位回傳。
+    - 0 → 視為無效比例尺，拋出 ValueError（避免把距離全部歸零卻標成 real）。
+    - 其他正值 → 換算為實際單位。
+    """
+    if scale is None:
+        return distance_px, DistanceUnit.PIXEL
+    if scale <= 0:
+        raise ValueError(f"scale 必須為正值（got {scale}）")
+    return distance_px * scale, DistanceUnit.REAL
 
 
 def eye_distance(animal: AnimalInstance, scale: float | None = None) -> MeasurementRecord:
@@ -95,7 +103,9 @@ def inter_animal_right_eye(
 
     records: list[MeasurementRecord] = []
     for a, b in combinations(with_right, 2):
-        assert a.right_eye is not None and b.right_eye is not None
+        if a.right_eye is None or b.right_eye is None:
+            # with_right 已過濾，理論上不會發生；以明確例外取代 assert（-O 下不會被移除，M-2）
+            raise ValueError("inter_animal_right_eye：配對動物缺少右眼座標")
         dist_px = euclidean(a.right_eye.x, a.right_eye.y, b.right_eye.x, b.right_eye.y)
         dist, unit = _apply_scale(dist_px, scale)
         records.append(

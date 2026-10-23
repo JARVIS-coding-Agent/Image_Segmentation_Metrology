@@ -9,7 +9,9 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 
+import matplotlib.image as mpimg
 import numpy as np
 
 from src import csv_writer, eye_detector, metrology
@@ -17,6 +19,7 @@ from src import logging_utils as log
 from src.config import Config, set_deterministic
 from src.models import AnimalInstance, Image, ImageStatus, MeasurementRecord
 from src.segmentation import AnimalSegmenter, Detection, mask_to_original
+from src.visualize import render_overlay
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -145,8 +148,6 @@ def process_image(
         if r.measurable and r.peer_instance_id and r.distance is not None
     ]
 
-    from src.visualize import render_overlay
-
     overlay_path = os.path.join(output_dir, "annotated", f"{image_id}.png")
     render_overlay(image, animals, overlay_path, right_eye_pairs=right_eye_pairs)
 
@@ -214,7 +215,6 @@ def run(args: argparse.Namespace) -> int:
     rows: list[dict[str, str]] = []
     processed = 0
     elapsed_list: list[float] = []
-    import time as _time
 
     # P0-A：--eval 時準備 COCO ground truth（有 annotation 才啟用分割評估）
     pred_masks: list[np.ndarray] = []
@@ -233,9 +233,7 @@ def run(args: argparse.Namespace) -> int:
     for path in inputs:
         image_id = os.path.splitext(os.path.basename(path))[0]
         with log.isolate_failure(image_id):
-            import matplotlib.image as mpimg
-
-            _t0 = _time.perf_counter()
+            _t0 = time.perf_counter()
             # 統一正規化為 uint8 [0,255]：matplotlib.imread 會因檔案格式/Pillow 版本
             # 回傳 float32 [0,1]（常見於 PNG）或 uint8 [0,255]（常見於 JPEG），
             # 下游 detector 以 0–255 灰階為前提，必須在讀取層統一，不讓 detector 猜格式。
@@ -244,7 +242,7 @@ def run(args: argparse.Namespace) -> int:
             img, animals, records = process_image(
                 image, image_id, os.path.basename(path), detections, cfg, cfg.output_dir
             )
-            elapsed_list.append(_time.perf_counter() - _t0)
+            elapsed_list.append(time.perf_counter() - _t0)
             by_id = {a.instance_id: a for a in animals}
             for rec in records:
                 subj = by_id.get(rec.subject_instance_id)
