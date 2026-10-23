@@ -159,13 +159,14 @@ specs/          # spec-kit 規格文件（spec/plan/research/data-model/contract
 
 ## 系統架構圖
 
-資料流：COCO → 篩選 → 分割 → 眼睛定位 → 測量 A/B → 評估 → 視覺化 + CSV。完整版見 `docs/architecture.md`。
+資料流：COCO → 篩選 → 選定展示圖 → 分割 → 眼睛定位 → 測量 A/B → 評估 → 視覺化 + CSV。完整版見 `docs/architecture.md`。
 
 ```mermaid
 flowchart LR
     A["COCO 資料集"] --> B["coco_selector<br/>篩選 ≥2 動物"]
-    B --> C["segmentation<br/>YOLO11-seg"]
-    C --> D["eye_detector<br/>頭部ROI+暗區啟發式"]
+    B --> S["選定展示圖<br/>000000555705.jpg"]
+    S --> C["segmentation<br/>YOLO11-seg"]
+    C --> D["eye_detector<br/>貓:Haar臉偵測<br/>其他:ROI暗區啟發式"]
     D --> E["metrology<br/>測量 A / 測量 B"]
     E --> F["evaluate<br/>IoU / Dice / NME"]
     E --> G["visualize<br/>疊圖"]

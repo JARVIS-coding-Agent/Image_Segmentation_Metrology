@@ -1,14 +1,15 @@
 # 系統架構圖（動物眼睛量測 Pipeline）
 
-資料流：COCO → 篩選 → 分割 → 眼睛定位 → 測量 A/B → 評估 → 視覺化 + CSV。
+資料流：COCO → 篩選 → 選定展示圖 → 分割 → 眼睛定位 → 測量 A/B → 評估 → 視覺化 + CSV。
 
 ## 資料流程圖
 
 ```mermaid
 flowchart LR
-    A["COCO 資料集<br/>影像 + annotations"] --> B["coco_selector<br/>篩選 ≥2 動物"]
-    B --> C["segmentation<br/>YOLO11-seg<br/>mask / bbox / 類別"]
-    C --> D["eye_detector<br/>頭部 ROI + 暗區啟發式<br/>（SAM2 精修可選）"]
+    A["COCO 資料集<br/>影像 + annotations"] --> B["coco_selector<br/>篩選 ≥2 動物<br/>（val2017 共 471 張）"]
+    B --> S["選定展示圖<br/>000000555705.jpg<br/>（兩隻貓）"]
+    S --> C["segmentation<br/>YOLO11-seg<br/>mask / bbox / 類別"]
+    C --> D["eye_detector<br/>貓：Haar 臉偵測+臉內暗點<br/>其他：ROI 暗區啟發式"]
     D --> E["metrology<br/>測量 A：雙眼距離<br/>測量 B：兩動物右眼距離"]
     E --> F["evaluate<br/>IoU / Dice / NME"]
     E --> G["visualize<br/>疊圖 annotated/*.png"]
@@ -16,13 +17,16 @@ flowchart LR
     F --> I["eval_report.md<br/>含 CPU P95 效能實測"]
 ```
 
+> 篩選模組（coco_selector）可對整個 COCO 子集運作並輸出合格清單（`outputs/selected_images.json`，471 張）；本次展示從清單中固定選用 `000000555705.jpg` 作為輸入，以利結果重現與檢視。
+
 ## 模組對應
 
 | 階段 | 模組 | 輸出 |
 |------|------|------|
-| 篩選 | `src/coco_selector.py` | `outputs/selected_images.json` |
+| 篩選 | `src/coco_selector.py` | `outputs/selected_images.json`（471 張） |
+| 選圖 | 展示固定選用 | `data/samples/000000555705.jpg` |
 | 分割 | `src/segmentation.py` | 每隻動物 mask / bbox / 類別 / 信心 |
-| 眼睛定位 | `src/eye_detector.py` | 左右眼 `EyePoint`（估計值標記） |
+| 眼睛定位 | `src/eye_detector.py` | 貓：Haar 臉偵測+臉內暗點；其他：ROI 暗區啟發式；左右眼 `EyePoint`（估計值標記） |
 | 測量 | `src/metrology.py` | 測量 A / 測量 B `MeasurementRecord` |
 | 評估 | `src/evaluate.py` | IoU / Dice / NME |
 | 視覺化 | `src/visualize.py` | `outputs/annotated/*.png` |
