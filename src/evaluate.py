@@ -73,3 +73,49 @@ def evaluate_eye_localization(
         gt_source=gt_source,
         sample_size=len(predicted),
     )
+
+
+def evaluate_segmentation(
+    pred_masks: list[np.ndarray],
+    gt_masks: list[np.ndarray],
+    gt_source: str = "coco",
+) -> list[EvaluationResult]:
+    """以 ground truth mask 對照分割預測，實際計算 IoU 與 Dice（P0-A / M-7）。
+
+    pred_masks / gt_masks 為等長、等尺寸的二值遮罩清單（通常為每張圖的聯集 mask）。
+    回傳 [IoU 結果, Dice 結果]，value 為所有樣本平均；sample_size 為樣本數。
+    長度不等視為呼叫端 bug（配對錯亂）→ ValueError，不以 min() 靜默丟棄多餘樣本。
+    """
+    if len(pred_masks) != len(gt_masks):
+        raise ValueError(
+            f"pred_masks 與 gt_masks 長度需相同：pred={len(pred_masks)}, "
+            f"gt={len(gt_masks)}（長度不等代表 pred/gt 配對錯亂）"
+        )
+    n = len(pred_masks)
+    if n == 0:
+        return []
+    for i in range(n):
+        if pred_masks[i].shape != gt_masks[i].shape:
+            raise ValueError(
+                f"segmentation mask shape mismatch at index {i}: "
+                f"pred={pred_masks[i].shape} vs gt={gt_masks[i].shape}; "
+                "pred 與 gt 必須對齊到相同座標系（原圖尺寸）"
+            )
+    iou_vals = [iou(pred_masks[i], gt_masks[i]) for i in range(n)]
+    dice_vals = [dice(pred_masks[i], gt_masks[i]) for i in range(n)]
+    return [
+        EvaluationResult(
+            metric="IoU",
+            scope="segmentation",
+            value=float(np.mean(iou_vals)),
+            gt_source=gt_source,
+            sample_size=n,
+        ),
+        EvaluationResult(
+            metric="Dice",
+            scope="segmentation",
+            value=float(np.mean(dice_vals)),
+            gt_source=gt_source,
+            sample_size=n,
+        ),
+    ]

@@ -11,6 +11,7 @@ import os
 import numpy as np
 
 from src.models import AnimalInstance
+from src.segmentation import mask_to_original
 
 LEFT_COLOR = "#1f77b4"   # 藍：左眼
 RIGHT_COLOR = "#d62728"  # 紅：右眼
@@ -35,6 +36,23 @@ def render_overlay(
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.imshow(image)
     ax.axis("off")
+
+    img_h, img_w = image.shape[0], image.shape[1]
+    mask_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
+
+    for idx, a in enumerate(animals):
+        # 畫 instance mask（半透明著色，P0-B）
+        # 與 IoU/Dice 共用 mask_to_original，確保疊圖與評估用同一套對齊
+        mask = mask_to_original(getattr(a, "mask", None), img_h, img_w)
+        if mask is not None:
+            color = mask_colors[idx % len(mask_colors)]
+            rgb = tuple(int(color[i : i + 2], 16) / 255 for i in (1, 3, 5))
+            overlay = np.zeros((img_h, img_w, 4), dtype=float)
+            overlay[..., 0] = rgb[0]
+            overlay[..., 1] = rgb[1]
+            overlay[..., 2] = rgb[2]
+            overlay[..., 3] = mask * 0.35  # alpha
+            ax.imshow(overlay)
 
     for a in animals:
         le, re = a.left_eye, a.right_eye

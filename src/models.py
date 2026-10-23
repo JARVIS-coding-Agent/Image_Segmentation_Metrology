@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ImageStatus(str, Enum):
@@ -57,12 +58,18 @@ class AnimalInstance(BaseModel):
     category: str
     bbox: tuple[float, float, float, float]  # x, y, w, h
     mask_ref: str | None = None
+    # HxW numpy 遮罩（0/1 或布林），供疊圖與 IoU/Dice 使用（P0-B）。
+    # exclude=True 讓 pydantic 明確排除序列化（不進 CSV / model_dump），
+    # 而非僅靠註解約定。
+    mask: Any = Field(default=None, exclude=True)
     confidence: float = Field(ge=0.0, le=1.0)
     low_confidence: bool = False
     left_eye: EyePoint | None = None
     right_eye: EyePoint | None = None
     measurable: bool = False
     unmeasurable_reason: str | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @model_validator(mode="after")
     def _check_bbox(self) -> "AnimalInstance":

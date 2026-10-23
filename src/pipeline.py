@@ -16,7 +16,7 @@ from src import csv_writer, eye_detector, metrology
 from src import logging_utils as log
 from src.config import Config, set_deterministic
 from src.models import AnimalInstance, Image, ImageStatus, MeasurementRecord
-from src.segmentation import AnimalSegmenter, Detection
+from src.segmentation import AnimalSegmenter, Detection, mask_to_original
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -88,6 +88,7 @@ def detections_to_animals(
                 image_id=image_id,
                 category=det.category,
                 bbox=det.bbox,
+                mask=det.mask,
                 confidence=det.confidence,
                 low_confidence=det.low_confidence,
                 left_eye=left,
@@ -215,6 +216,20 @@ def run(args: argparse.Namespace) -> int:
     elapsed_list: list[float] = []
     import time as _time
 
+    # P0-A：--eval 時準備 COCO ground truth（有 annotation 才啟用分割評估）
+    pred_masks: list[np.ndarray] = []
+    gt_masks: list[np.ndarray] = []
+    gt_loader = None
+    if args.eval:
+        ann = _find_coco_annotation(cfg.coco_dir)
+        if ann:
+            try:
+                from src.coco_selector import CocoGroundTruth
+
+                gt_loader = CocoGroundTruth(ann, set(cfg.animal_classes))
+            except Exception as exc:
+                log.warn(f"coco ground truth unavailable: {exc}")
+
     for path in inputs:
         image_id = os.path.splitext(os.path.basename(path))[0]
         with log.isolate_failure(image_id):
@@ -239,14 +254,48 @@ def run(args: argparse.Namespace) -> int:
                 rows.append(csv_writer.record_to_row(rec, subj, peer))
             processed += 1
 
+            # P0-A：蒐集預測聯集 mask 與 COCO GT 聯集 mask，供 IoU/Dice 評估
+            if gt_loader is not None and animals:
+                pred_union = _union_pred_mask(animals, image.shape[0], image.shape[1])
+                gt_union = gt_loader.union_animal_mask(image_id)
+                if pred_union is not None and gt_union is not None:
+                    # pred 以原圖尺寸為基準、GT 以 COCO annotation h/w 為基準；
+                    # 兩者必須一致才對得上，否則 IoU/Dice 無意義 → 跳過並警告，
+                    # 不默默算出一個錯的數字（避免 M-4 影像尺寸不一致靜默汙染）。
+                    if pred_union.shape != gt_union.shape:
+                        log.warn(
+                            f"mask shape mismatch image={image_id} "
+                            f"pred={pred_union.shape} gt={gt_union.shape}; skip eval"
+                        )
+                    else:
+                        pred_masks.append(pred_union)
+                        gt_masks.append(gt_union)
+
     csv_path = os.path.join(cfg.output_dir, "measurements.csv")
     csv_writer.write_csv(rows, csv_path)
     log.info(f"pipeline done images={processed} records={len(rows)} csv={csv_path}")
 
     if args.eval:
-        report_path = write_eval_report(cfg, processed, len(rows), elapsed_list)
+        report_path = write_eval_report(cfg, processed, len(rows), elapsed_list, pred_masks, gt_masks)
         log.info(f"eval report written: {report_path}")
     return 0
+
+
+def _union_pred_mask(animals, img_h: int, img_w: int) -> np.ndarray | None:
+    """將一張圖所有 AnimalInstance 的 mask 聯集成單一二值 mask（原圖尺寸）。
+
+    與疊圖共用 mask_to_original，確保預測聯集 mask 與 overlay 使用完全相同的
+    mask→原圖對齊，IoU/Dice 才對得上肉眼在疊圖看到的結果。
+    """
+    union = np.zeros((img_h, img_w), dtype=bool)
+    found = False
+    for a in animals:
+        mask = mask_to_original(getattr(a, "mask", None), img_h, img_w)
+        if mask is None:
+            continue
+        union |= mask
+        found = True
+    return union if found else None
 
 
 def _percentile(values: list[float], pct: float) -> float:
@@ -295,11 +344,14 @@ def write_eval_report(
     images: int,
     records: int,
     elapsed_list: list[float],
+    pred_masks: list[np.ndarray] | None = None,
+    gt_masks: list[np.ndarray] | None = None,
 ) -> str:
     """產出評估報告 eval_report.md，含效能實測（CPU P95 per SC-007）。
 
-    分割品質（IoU/Dice）與眼睛 NME 需 ground truth；此處載入 data/ground_truth
-    若存在則彙總，否則於報告標註尚無 ground truth。
+    分割品質（IoU/Dice）：若提供 pred_masks 與 COCO GT masks，實際呼叫
+    evaluate_segmentation 計算（P0-A / M-7）；否則標註未提供 ground truth。
+    眼睛 NME 需人工眼睛標註，目前以 data/ground_truth 說明。
     """
     gt_dir = os.path.join("data", "ground_truth")
     gt_note = (
@@ -332,6 +384,34 @@ def write_eval_report(
             "效能驗收請以多張樣本（建議 ≥20 張）執行 `--eval` 取得具統計意義的 P95。",
         ]
 
+    # P0-A / M-7：有預測與 COCO GT mask 時，實際計算 IoU / Dice
+    seg_lines: list[str] = [
+        "- IoU = |A∩B| / |A∪B|；Dice = 2|A∩B| / (|A|+|B|)；NME = 平均點位誤差 / 正規化尺度。",
+    ]
+    if pred_masks and gt_masks:
+        from src.evaluate import evaluate_segmentation
+
+        seg_results = evaluate_segmentation(pred_masks, gt_masks, gt_source="coco")
+        for r in seg_results:
+            seg_lines.append(
+                f"- {r.metric}（分割，vs COCO 標註，n={r.sample_size}）：{r.value:.4f}"
+            )
+        n_seg = seg_results[0].sample_size if seg_results else 0
+        if n_seg < 5:
+            seg_lines.append(
+                f"- **樣本數不足（n={n_seg} < 5），上列 IoU/Dice 僅供參考、不具統計意義**；"
+                "建議以多張樣本（≥20 張）執行 `--eval` 取得具代表性的分割品質。"
+            )
+    else:
+        seg_lines.append(
+            "- 分割 IoU/Dice：本次未取得 COCO GT mask（需有 COCO annotation 且圖片可對應）。"
+        )
+    seg_lines.append(f"- 眼睛 NME：{gt_note}")
+    seg_lines.append(
+        "- 評估函式見 `src/evaluate.py`（iou / dice / nme / evaluate_segmentation / "
+        "evaluate_eye_localization）。"
+    )
+
     lines = [
         "# 評估報告（Evaluation Report）",
         "",
@@ -341,9 +421,7 @@ def write_eval_report(
         "",
         "## 分割品質（IoU / Dice）與眼睛定位（NME）",
         "",
-        "- IoU = |A∩B| / |A∪B|；Dice = 2|A∩B| / (|A|+|B|)；NME = 平均點位誤差 / 正規化尺度。",
-        f"- {gt_note}",
-        "- 評估函式見 `src/evaluate.py`（iou / dice / nme / evaluate_eye_localization）。",
+        *seg_lines,
         "",
     ]
     os.makedirs(cfg.output_dir, exist_ok=True)
