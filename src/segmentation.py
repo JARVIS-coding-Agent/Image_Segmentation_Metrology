@@ -90,8 +90,8 @@ def mask_to_original(
 
     前提：segment() 以 retina_masks=True 推論，mask 已去除 letterbox padding 且
     對齊原圖解析度，因此正常情況 shape 已等於 (img_h, img_w)。若因模型/版本差異
-    仍有尺寸落差，改用 OpenCV 最近鄰「真正的 resize」（而非等距抽樣，抽樣會漏像素
-    並造成鋸齒，污染 IoU）。回傳 None 表示無有效 mask。
+    仍有尺寸落差，改用最近鄰 resize（以 round 映射每個目標像素到最近來源像素，
+    而非等距抽樣端點；抽樣會漏像素並造成鋸齒、污染 IoU）。回傳 None 表示無有效 mask。
     """
     if mask is None:
         return None
@@ -101,9 +101,8 @@ def mask_to_original(
     binary = m > 0.5
     if binary.shape == (img_h, img_w):
         return binary
-    import cv2
-
-    resized = cv2.resize(
-        binary.astype(np.uint8), (img_w, img_h), interpolation=cv2.INTER_NEAREST
-    )
-    return resized.astype(bool)
+    src_h, src_w = binary.shape
+    # 最近鄰：每個目標座標 +0.5 居中後映射回來源，取 round 到最近來源像素
+    ys = np.minimum((np.arange(img_h) + 0.5) * src_h / img_h, src_h - 1).astype(int)
+    xs = np.minimum((np.arange(img_w) + 0.5) * src_w / img_w, src_w - 1).astype(int)
+    return binary[np.ix_(ys, xs)]
