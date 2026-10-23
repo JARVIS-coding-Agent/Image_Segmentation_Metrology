@@ -48,6 +48,19 @@ def test_find_dark_spots_low_contrast_returns_empty():
     assert find_dark_spots(gray, n=2) == []
 
 
+def test_find_dark_spots_float01_still_detects():
+    # float [0,1] 輸入：入口 guard 應放大為 0–255，暗斑仍可偵測，
+    # 不因 median − min_contrast 恆為負而系統性回空（FRIDAY blocker）。
+    gray = np.full((20, 40), 0.5)  # 中位數 0.5
+    gray[8:12, 5:9] = 0.0          # 左暗斑
+    gray[8:12, 31:35] = 0.0        # 右暗斑
+    spots = find_dark_spots(gray, n=2)
+    assert len(spots) == 2
+    # 兩群質心 x 應分居左右
+    xs = sorted(s[0] for s in spots)
+    assert xs[0] < 20 < xs[1]
+
+
 def test_detect_eyes_left_smaller_x():
     img = np.full((40, 80, 3), 220, dtype=np.uint8)
     # 在頭部 ROI（上半部）放兩個暗斑

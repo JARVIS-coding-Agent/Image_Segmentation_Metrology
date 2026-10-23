@@ -63,9 +63,17 @@ def find_dark_spots(
     - 若沒有任何像素低於門檻（例如低對比 / 均勻影像），回傳空清單，
       由上層標記為無法量測，而非輸出垃圾座標。
     - 找到暗像素後，依 x 中位數水平二分為左右兩群，各取質心。
+
+    輸入前提：灰階值域為 0–255。若偵測到 float [0,1] 影像（最大值 ≤ 1），
+    在此自動放大為 0–255，避免 ``median − min_contrast`` 恆為負導致系統性拒絕量測
+    （防禦縱深；根本修正在 pipeline 讀取層統一正規化）。
     """
     if gray.size == 0:
         return []
+
+    # 防禦縱深：float [0,1] 影像放大到 0–255，與 min_contrast 的尺度對齊
+    if float(gray.max()) <= 1.0:
+        gray = gray * 255.0
 
     median_level = float(np.median(gray))
     thresh = median_level - min_contrast

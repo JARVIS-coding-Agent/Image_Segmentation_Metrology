@@ -221,9 +221,10 @@ def run(args: argparse.Namespace) -> int:
             import matplotlib.image as mpimg
 
             _t0 = _time.perf_counter()
-            image = (mpimg.imread(path) * 255).astype(np.uint8) if path.lower().endswith(
-                (".png",)
-            ) else mpimg.imread(path)
+            # 統一正規化為 uint8 [0,255]：matplotlib.imread 會因檔案格式/Pillow 版本
+            # 回傳 float32 [0,1]（常見於 PNG）或 uint8 [0,255]（常見於 JPEG），
+            # 下游 detector 以 0–255 灰階為前提，必須在讀取層統一，不讓 detector 猜格式。
+            image = _read_image_uint8(mpimg.imread(path))
             detections = segmenter.segment(image)
             img, animals, records = process_image(
                 image, image_id, os.path.basename(path), detections, cfg, cfg.output_dir
@@ -254,6 +255,34 @@ def _percentile(values: list[float], pct: float) -> float:
     return float(np.percentile(np.array(values), pct))
 
 
+def _read_image_uint8(arr: np.ndarray) -> np.ndarray:
+    """將 matplotlib.imread 的結果統一正規化為 uint8 [0,255] 的 RGB/灰階陣列。
+
+    matplotlib 依檔案格式與 Pillow 版本可能回傳：
+    - float32 [0,1]（常見於 PNG）
+    - uint8 [0,255]（常見於 JPEG）
+    下游 eye_detector 以 0–255 灰階為前提，格式不統一會讓對比門檻失效
+    （float [0,1] 下 median − 25 恆為負，暗像素門檻永遠篩不到，系統性拒絕量測）。
+    故在讀取層統一，不讓 detector 猜格式。
+    """
+    if arr.dtype == np.uint8:
+        out = arr
+    elif np.issubdtype(arr.dtype, np.floating):
+        # float 影像慣例為 [0,1]；夾限後轉 [0,255]
+        out = (np.clip(arr, 0.0, 1.0) * 255.0).round().astype(np.uint8)
+    else:
+        # 其他整數型別（如 uint16）：依最大值縮放到 [0,255]
+        maxv = float(arr.max()) if arr.size else 0.0
+        if maxv > 0:
+            out = (arr.astype(np.float64) / maxv * 255.0).round().astype(np.uint8)
+        else:
+            out = arr.astype(np.uint8)
+    # 去除 alpha 通道（RGBA → RGB）
+    if out.ndim == 3 and out.shape[2] == 4:
+        out = out[..., :3]
+    return out
+
+
 def write_eval_report(
     cfg: Config,
     images: int,
@@ -273,8 +302,10 @@ def write_eval_report(
     )
 
     # C-1：效能 P95 需足夠樣本才有統計意義；n < 5 不報 P95，避免不實宣稱
+    # 以實際計時樣本數 len(elapsed_list) 為準，而非 images，避免部分圖失敗時兩者不一致
     MIN_PERF_SAMPLES = 5
-    if images >= MIN_PERF_SAMPLES:
+    n_perf = len(elapsed_list)
+    if n_perf >= MIN_PERF_SAMPLES:
         p50 = _percentile(elapsed_list, 50)
         p95 = _percentile(elapsed_list, 95)
         perf_lines = [
@@ -290,7 +321,7 @@ def write_eval_report(
             f"- 處理圖片數：{images}",
             f"- 量測紀錄數：{records}",
             f"- 單張平均處理時間：{mean_t:.3f}s（**僅供參考，含模型載入**）",
-            f"- **樣本數不足（n={images} < {MIN_PERF_SAMPLES}），不計 P95**；"
+            f"- **樣本數不足（n={n_perf} < {MIN_PERF_SAMPLES}），不計 P95**；"
             "效能驗收請以多張樣本（建議 ≥20 張）執行 `--eval` 取得具統計意義的 P95。",
         ]
 
