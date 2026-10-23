@@ -94,8 +94,8 @@ $$\text{NME} = \frac{1}{N}\sum_{i=1}^{N}\frac{\lVert p_i - \hat{p}_i \rVert_2}{d
   1. **疊圖人工目視**：`outputs/annotated/*.png` 檢查左右眼標記、連線與數值是否合理。
   2. **ground truth 對照**：對 ≥10 張人工標註眼睛，計算 NME / 像素誤差（`--eval`）。
   3. **一致性檢查**：左右眼對稱性、雙眼距與頭框尺寸比例合理性。
-  4. **單元測試**：`pytest` 對距離公式與評估公式的已知座標驗證數學正確性（39 測試通過，metrology/evaluate 覆蓋率 ≥ 80%）。
-- **效能與決定性**：單張 CPU P95 ≤ 5s（實測記錄於 `outputs/eval_report.md`）；固定種子與 pinned 版本，相同輸入產生相同結果。
+  4. **單元測試**：`pytest` 對距離公式與評估公式的已知座標驗證數學正確性（全套 40 測試通過，metrology/evaluate 覆蓋率 ≥ 80%）。
+- **效能與決定性**：以多張樣本實測單張 CPU 處理時間（20 張實測 P95 ≈ 0.74s，遠低於 5s 目標）；效能須以 ≥5 張樣本才具統計意義，單張展示（含模型載入）不作為效能依據，報告會標示「樣本數不足」。固定種子與 pinned 版本，相同輸入產生相同結果。
 
 > 展示結果：輸入 `data/samples/000000555705.jpg`、疊圖 `outputs/annotated/000000555705.png`、量測 `outputs/measurements.csv`、報告 `outputs/eval_report.md`。
 

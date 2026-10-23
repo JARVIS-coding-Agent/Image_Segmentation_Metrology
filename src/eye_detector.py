@@ -53,16 +53,22 @@ def _to_gray(image: np.ndarray) -> np.ndarray:
 def find_dark_spots(
     gray: np.ndarray,
     n: int = 2,
-    dark_percentile: float = 15.0,
+    min_contrast: float = 25.0,
 ) -> list[tuple[float, float]]:
     """在灰階 ROI 中找最暗的 n 個區域中心（質心），回傳 (x, y) 清單。
 
-    以暗度分位數閾值取得暗像素，依連通分群取質心；簡化為 KMeans-free 的
-    水平二分：將暗像素依 x 中位數分為左右兩群，各取質心。
+    閾值策略（C-3，避免靜默 false positive）：
+    - 以「中位數亮度 − ``min_contrast``」為暗像素門檻，只選出**明顯比整體暗**的像素；
+      這與固定百分位不同，暗斑佔比很小時也不會把背景誤選進來。
+    - 若沒有任何像素低於門檻（例如低對比 / 均勻影像），回傳空清單，
+      由上層標記為無法量測，而非輸出垃圾座標。
+    - 找到暗像素後，依 x 中位數水平二分為左右兩群，各取質心。
     """
     if gray.size == 0:
         return []
-    thresh = np.percentile(gray, dark_percentile)
+
+    median_level = float(np.median(gray))
+    thresh = median_level - min_contrast
     ys, xs = np.where(gray <= thresh)
     if xs.size == 0:
         return []
@@ -195,9 +201,9 @@ def detect_eyes(
     abs_spots = sorted(((sx + x0, sy + y0) for sx, sy in spots), key=lambda p: p[0])
     (lx, ly), (rx, ry) = abs_spots[0], abs_spots[-1]
 
-    source = EyeSource.SAM2 if use_sam2 else EyeSource.HEURISTIC
-    left = EyePoint(side=EyeSide.LEFT, x=lx, y=ly, is_estimated=True, source=source)
-    right = EyePoint(side=EyeSide.RIGHT, x=rx, y=ry, is_estimated=True, source=source)
+    # 先以啟發式來源建點；是否升級為 SAM2 由 _refine_with_sam2 實際結果決定（C-4：不造假）
+    left = EyePoint(side=EyeSide.LEFT, x=lx, y=ly, is_estimated=True, source=EyeSource.HEURISTIC)
+    right = EyePoint(side=EyeSide.RIGHT, x=rx, y=ry, is_estimated=True, source=EyeSource.HEURISTIC)
 
     if use_sam2:
         left, right = _refine_with_sam2(image, left, right)
@@ -207,11 +213,16 @@ def detect_eyes(
 def _refine_with_sam2(
     image: np.ndarray, left: EyePoint, right: EyePoint
 ) -> tuple[EyePoint, EyePoint]:
-    """可選 SAM2 精修掛鉤。未安裝 SAM2 時回退啟發式結果。"""
+    """可選 SAM2 精修掛鉤。
+
+    僅在 SAM2 實際可用且成功精修時，才將座標來源標記為 SAM2；
+    未安裝或未精修時，保留輸入點的原始來源（不造假 source，C-4）。
+    """
     try:
         import sam2  # noqa: F401
     except Exception:
-        # 未安裝 → 回退啟發式
+        # 未安裝 → 回退，維持原始來源（不標記為 sam2）
         return left, right
-    # 若有 SAM2，實際精修流程於整合環境實作；此處保守回傳輸入點。
+    # 若有 SAM2，實際精修流程於整合環境實作；此處保守回傳輸入點，
+    # 並且因為未進行實質精修，同樣不竄改來源為 sam2。
     return left, right

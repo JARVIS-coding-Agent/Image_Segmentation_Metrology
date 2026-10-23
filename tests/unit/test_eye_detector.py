@@ -37,8 +37,15 @@ def test_find_dark_spots_two_symmetric():
 
 
 def test_find_dark_spots_empty_when_uniform():
-    # 全均勻：分位數閾值會抓到像素，但應仍可分群；測空輸入
+    # 空輸入 → 空清單
     assert find_dark_spots(np.array([]).reshape(0, 0), n=2) == []
+
+
+def test_find_dark_spots_low_contrast_returns_empty():
+    # 低對比（近均勻）影像：暗區不顯著 → 回空清單（C-3，避免假眼睛）
+    gray = np.full((20, 40), 128.0)
+    gray += np.random.RandomState(0).uniform(-3, 3, gray.shape)  # 極小雜訊
+    assert find_dark_spots(gray, n=2) == []
 
 
 def test_detect_eyes_left_smaller_x():
@@ -55,10 +62,10 @@ def test_detect_eyes_left_smaller_x():
 
 
 def test_detect_eyes_returns_none_when_no_dark_region():
-    img = np.full((40, 80, 3), 128, dtype=np.uint8)  # 完全均勻，無對稱暗斑
+    # 完全均勻影像：無顯著暗區 → 兩眼皆為 None（C-3，不輸出垃圾座標）
+    img = np.full((40, 80, 3), 128, dtype=np.uint8)
     left, right = detect_eyes(img, bbox=(0, 0, 80, 40))
-    # 均勻影像下分位數仍會切出兩群，但可能退化；至少不應拋例外
-    assert (left is None) == (right is None)
+    assert left is None and right is None
 
 
 

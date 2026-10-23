@@ -265,8 +265,6 @@ def write_eval_report(
     分割品質（IoU/Dice）與眼睛 NME 需 ground truth；此處載入 data/ground_truth
     若存在則彙總，否則於報告標註尚無 ground truth。
     """
-    p95 = _percentile(elapsed_list, 95)
-    p50 = _percentile(elapsed_list, 50)
     gt_dir = os.path.join("data", "ground_truth")
     gt_note = (
         f"已偵測 ground truth 目錄：{gt_dir}（請放入 ≥10 張人工眼睛標註以計算 NME）"
@@ -274,16 +272,34 @@ def write_eval_report(
         else f"尚未提供 ground truth（預期於 {gt_dir}，需 ≥10 張以計算 NME）"
     )
 
+    # C-1：效能 P95 需足夠樣本才有統計意義；n < 5 不報 P95，避免不實宣稱
+    MIN_PERF_SAMPLES = 5
+    if images >= MIN_PERF_SAMPLES:
+        p50 = _percentile(elapsed_list, 50)
+        p95 = _percentile(elapsed_list, 95)
+        perf_lines = [
+            f"- 處理圖片數：{images}",
+            f"- 量測紀錄數：{records}",
+            f"- 單張處理時間 P50：{p50:.3f}s",
+            f"- 單張處理時間 P95：{p95:.3f}s（目標 ≤ 5s）",
+            f"- 驗收：{'PASS' if p95 <= 5.0 else 'REVIEW'}",
+        ]
+    else:
+        mean_t = sum(elapsed_list) / len(elapsed_list) if elapsed_list else 0.0
+        perf_lines = [
+            f"- 處理圖片數：{images}",
+            f"- 量測紀錄數：{records}",
+            f"- 單張平均處理時間：{mean_t:.3f}s（**僅供參考，含模型載入**）",
+            f"- **樣本數不足（n={images} < {MIN_PERF_SAMPLES}），不計 P95**；"
+            "效能驗收請以多張樣本（建議 ≥20 張）執行 `--eval` 取得具統計意義的 P95。",
+        ]
+
     lines = [
         "# 評估報告（Evaluation Report）",
         "",
         "## 效能實測（CPU 參考環境，SC-007）",
         "",
-        f"- 處理圖片數：{images}",
-        f"- 量測紀錄數：{records}",
-        f"- 單張處理時間 P50：{p50:.3f}s",
-        f"- 單張處理時間 P95：{p95:.3f}s（目標 ≤ 5s）",
-        f"- 驗收：{'PASS' if p95 <= 5.0 or images == 0 else 'REVIEW'}",
+        *perf_lines,
         "",
         "## 分割品質（IoU / Dice）與眼睛定位（NME）",
         "",
