@@ -11,6 +11,7 @@ import os
 import numpy as np
 
 from src.models import AnimalInstance
+from src.segmentation import mask_to_original
 
 LEFT_COLOR = "#1f77b4"   # 藍：左眼
 RIGHT_COLOR = "#d62728"  # 紅：右眼
@@ -41,23 +42,17 @@ def render_overlay(
 
     for idx, a in enumerate(animals):
         # 畫 instance mask（半透明著色，P0-B）
-        m = getattr(a, "mask", None)
-        if m is not None:
-            mask = np.asarray(m)
-            if mask.ndim == 2 and mask.size > 0:
-                # YOLO mask 解析度可能與原圖不同 → 最近鄰縮放到原圖尺寸
-                if mask.shape != (img_h, img_w):
-                    ys = (np.linspace(0, mask.shape[0] - 1, img_h)).astype(int)
-                    xs = (np.linspace(0, mask.shape[1] - 1, img_w)).astype(int)
-                    mask = mask[np.ix_(ys, xs)]
-                color = mask_colors[idx % len(mask_colors)]
-                rgb = tuple(int(color[i : i + 2], 16) / 255 for i in (1, 3, 5))
-                overlay = np.zeros((img_h, img_w, 4), dtype=float)
-                overlay[..., 0] = rgb[0]
-                overlay[..., 1] = rgb[1]
-                overlay[..., 2] = rgb[2]
-                overlay[..., 3] = (mask > 0.5) * 0.35  # alpha
-                ax.imshow(overlay)
+        # 與 IoU/Dice 共用 mask_to_original，確保疊圖與評估用同一套對齊
+        mask = mask_to_original(getattr(a, "mask", None), img_h, img_w)
+        if mask is not None:
+            color = mask_colors[idx % len(mask_colors)]
+            rgb = tuple(int(color[i : i + 2], 16) / 255 for i in (1, 3, 5))
+            overlay = np.zeros((img_h, img_w, 4), dtype=float)
+            overlay[..., 0] = rgb[0]
+            overlay[..., 1] = rgb[1]
+            overlay[..., 2] = rgb[2]
+            overlay[..., 3] = mask * 0.35  # alpha
+            ax.imshow(overlay)
 
     for a in animals:
         le, re = a.left_eye, a.right_eye

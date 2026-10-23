@@ -88,6 +88,13 @@ def evaluate_segmentation(
     n = min(len(pred_masks), len(gt_masks))
     if n == 0:
         return []
+    for i in range(n):
+        if pred_masks[i].shape != gt_masks[i].shape:
+            raise ValueError(
+                f"segmentation mask shape mismatch at index {i}: "
+                f"pred={pred_masks[i].shape} vs gt={gt_masks[i].shape}; "
+                "pred 與 gt 必須對齊到相同座標系（原圖尺寸）"
+            )
     iou_vals = [iou(pred_masks[i], gt_masks[i]) for i in range(n)]
     dice_vals = [dice(pred_masks[i], gt_masks[i]) for i in range(n)]
     return [

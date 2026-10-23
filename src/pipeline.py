@@ -16,7 +16,7 @@ from src import csv_writer, eye_detector, metrology
 from src import logging_utils as log
 from src.config import Config, set_deterministic
 from src.models import AnimalInstance, Image, ImageStatus, MeasurementRecord
-from src.segmentation import AnimalSegmenter, Detection
+from src.segmentation import AnimalSegmenter, Detection, mask_to_original
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -259,8 +259,17 @@ def run(args: argparse.Namespace) -> int:
                 pred_union = _union_pred_mask(animals, image.shape[0], image.shape[1])
                 gt_union = gt_loader.union_animal_mask(image_id)
                 if pred_union is not None and gt_union is not None:
-                    pred_masks.append(pred_union)
-                    gt_masks.append(gt_union)
+                    # pred 以原圖尺寸為基準、GT 以 COCO annotation h/w 為基準；
+                    # 兩者必須一致才對得上，否則 IoU/Dice 無意義 → 跳過並警告，
+                    # 不默默算出一個錯的數字（避免 M-4 影像尺寸不一致靜默汙染）。
+                    if pred_union.shape != gt_union.shape:
+                        log.warn(
+                            f"mask shape mismatch image={image_id} "
+                            f"pred={pred_union.shape} gt={gt_union.shape}; skip eval"
+                        )
+                    else:
+                        pred_masks.append(pred_union)
+                        gt_masks.append(gt_union)
 
     csv_path = os.path.join(cfg.output_dir, "measurements.csv")
     csv_writer.write_csv(rows, csv_path)
@@ -273,21 +282,18 @@ def run(args: argparse.Namespace) -> int:
 
 
 def _union_pred_mask(animals, img_h: int, img_w: int) -> np.ndarray | None:
-    """將一張圖所有 AnimalInstance 的 mask 聯集成單一二值 mask（縮放到原圖尺寸）。"""
+    """將一張圖所有 AnimalInstance 的 mask 聯集成單一二值 mask（原圖尺寸）。
+
+    與疊圖共用 mask_to_original，確保預測聯集 mask 與 overlay 使用完全相同的
+    mask→原圖對齊，IoU/Dice 才對得上肉眼在疊圖看到的結果。
+    """
     union = np.zeros((img_h, img_w), dtype=bool)
     found = False
     for a in animals:
-        m = getattr(a, "mask", None)
-        if m is None:
+        mask = mask_to_original(getattr(a, "mask", None), img_h, img_w)
+        if mask is None:
             continue
-        mask = np.asarray(m)
-        if mask.ndim != 2 or mask.size == 0:
-            continue
-        if mask.shape != (img_h, img_w):
-            ys = np.linspace(0, mask.shape[0] - 1, img_h).astype(int)
-            xs = np.linspace(0, mask.shape[1] - 1, img_w).astype(int)
-            mask = mask[np.ix_(ys, xs)]
-        union |= mask > 0.5
+        union |= mask
         found = True
     return union if found else None
 
@@ -389,6 +395,12 @@ def write_eval_report(
         for r in seg_results:
             seg_lines.append(
                 f"- {r.metric}（分割，vs COCO 標註，n={r.sample_size}）：{r.value:.4f}"
+            )
+        n_seg = seg_results[0].sample_size if seg_results else 0
+        if n_seg < 5:
+            seg_lines.append(
+                f"- **樣本數不足（n={n_seg} < 5），上列 IoU/Dice 僅供參考、不具統計意義**；"
+                "建議以多張樣本（≥20 張）執行 `--eval` 取得具代表性的分割品質。"
             )
     else:
         seg_lines.append(
