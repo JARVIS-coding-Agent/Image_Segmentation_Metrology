@@ -61,6 +61,22 @@ def test_find_dark_spots_float01_still_detects():
     assert xs[0] < 20 < xs[1]
 
 
+def test_find_dark_spots_single_blob_returns_empty():
+    # 單一高對比暗斑：不應被硬切成一對假眼睛（ULTRON P1）。
+    # 暗斑連續、x 方向無顯著間隙 → 無法成對 → 回空清單。
+    gray = np.full((20, 40), 200.0)
+    gray[8:12, 18:23] = 10.0  # 單一連續暗斑，橫跨中線附近
+    assert find_dark_spots(gray, n=2) == []
+
+
+def test_detect_eyes_single_blob_unmeasurable():
+    # 單一暗斑經 detect_eyes → 兩眼皆 None（不輸出假眼睛對，ULTRON P1）。
+    img = np.full((40, 80, 3), 220, dtype=np.uint8)
+    img[8:12, 36:44] = 10  # 中央單一連續暗斑
+    left, right = detect_eyes(img, bbox=(0, 0, 80, 40))
+    assert left is None and right is None
+
+
 def test_detect_eyes_left_smaller_x():
     img = np.full((40, 80, 3), 220, dtype=np.uint8)
     # 在頭部 ROI（上半部）放兩個暗斑

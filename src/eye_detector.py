@@ -54,6 +54,7 @@ def find_dark_spots(
     gray: np.ndarray,
     n: int = 2,
     min_contrast: float = 25.0,
+    min_gap_ratio: float = 0.15,
 ) -> list[tuple[float, float]]:
     """在灰階 ROI 中找最暗的 n 個區域中心（質心），回傳 (x, y) 清單。
 
@@ -62,7 +63,13 @@ def find_dark_spots(
       這與固定百分位不同，暗斑佔比很小時也不會把背景誤選進來。
     - 若沒有任何像素低於門檻（例如低對比 / 均勻影像），回傳空清單，
       由上層標記為無法量測，而非輸出垃圾座標。
-    - 找到暗像素後，依 x 中位數水平二分為左右兩群，各取質心。
+
+    n==2 的「成對」驗證（避免假眼睛，ULTRON P1）：
+    - **不**以 x 中位數硬切兩群；單一暗斑被中位數劈半會產生一對緊貼的假眼睛。
+    - 改以 x 方向的**最大間隙**找真正的分離點：唯有左右兩團之間存在
+      顯著空隙（間隙 ≥ ROI 寬的 ``min_gap_ratio``）才視為兩隻眼。
+    - 否則（單一連續暗斑、或兩團貼太近無法區分）回傳空清單，
+      由上層標記為無法量測。
 
     輸入前提：灰階值域為 0–255。若偵測到 float [0,1] 影像（最大值 ≤ 1），
     在此自動放大為 0–255，避免 ``median − min_contrast`` 恆為負導致系統性拒絕量測
@@ -84,15 +91,33 @@ def find_dark_spots(
     if n == 1:
         return [(float(xs.mean()), float(ys.mean()))]
 
-    # n==2：以 x 中位數切成左右兩群，各取質心
-    x_split = np.median(xs)
-    left_mask = xs <= x_split
-    right_mask = xs > x_split
+    # n==2：以 x 方向最大間隙分群，並驗證左右兩團確實分離（ULTRON P1）
+    roi_w = float(gray.shape[1])
+    order = np.argsort(xs)
+    xs_sorted = xs[order]
+    ys_sorted = ys[order]
+    ux = np.unique(xs_sorted)
+    if ux.size < 2:
+        # 只占一條 x（退化的單一暗斑）→ 無法成對
+        return []
+
+    # 找相鄰唯一 x 之間的最大間隙作為左右分界
+    gaps = np.diff(ux)
+    gi = int(np.argmax(gaps))
+    max_gap = float(gaps[gi])
+    # 間隙需達 ROI 寬的一定比例，否則視為單一連續暗斑 → 不成對
+    if max_gap < max(2.0, roi_w * min_gap_ratio):
+        return []
+
+    split_x = (ux[gi] + ux[gi + 1]) / 2.0
+    left_mask = xs_sorted <= split_x
+    right_mask = ~left_mask
     spots: list[tuple[float, float]] = []
     for m in (left_mask, right_mask):
         if m.sum() == 0:
-            continue
-        spots.append((float(xs[m].mean()), float(ys[m].mean())))
+            # 理論上不會發生（間隙保證兩側皆有點），保守處理
+            return []
+        spots.append((float(xs_sorted[m].mean()), float(ys_sorted[m].mean())))
     return spots
 
 
