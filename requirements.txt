@@ -7,7 +7,8 @@ opencv-python==4.10.0.84    # 影像處理與幾何計算
 numpy==1.26.4               # 數值運算
 matplotlib==3.9.2           # 視覺化疊圖
 pydantic==2.9.2             # 資料模型與驗證
-pandas==2.2.3               # CSV 輸出
+
+# 註：CSV 輸出使用 Python 標準庫 csv（見 src/csv_writer.py），不需 pandas。
 
 # Testing
 pytest==8.3.3
