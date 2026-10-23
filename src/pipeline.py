@@ -271,10 +271,17 @@ def _read_image_uint8(arr: np.ndarray) -> np.ndarray:
         # float 影像慣例為 [0,1]；夾限後轉 [0,255]
         out = (np.clip(arr, 0.0, 1.0) * 255.0).round().astype(np.uint8)
     else:
-        # 其他整數型別（如 uint16）：依最大值縮放到 [0,255]
-        maxv = float(arr.max()) if arr.size else 0.0
-        if maxv > 0:
-            out = (arr.astype(np.float64) / maxv * 255.0).round().astype(np.uint8)
+        # 其他整數型別（如 uint16）：依該 dtype 的理論全幅縮放，
+        # 而非 arr.max()，以保留絕對亮度語意（過曝/正常曝光的 uint16
+        # 不會被 max 縮放抹平成相同亮度）。
+        try:
+            full_scale = float(np.iinfo(arr.dtype).max)
+        except ValueError:
+            full_scale = 0.0
+        if full_scale > 0:
+            out = (
+                np.clip(arr.astype(np.float64) / full_scale, 0.0, 1.0) * 255.0
+            ).round().astype(np.uint8)
         else:
             out = arr.astype(np.uint8)
     # 去除 alpha 通道（RGBA → RGB）
