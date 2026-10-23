@@ -104,3 +104,18 @@ def test_evaluate_segmentation_averages_over_samples():
 
 def test_evaluate_segmentation_empty_returns_empty():
     assert evaluate_segmentation([], []) == []
+
+
+def test_evaluate_segmentation_length_mismatch_raises():
+    """長度不等代表 pred/gt 配對錯亂，應 ValueError 而非 min() 靜默截斷。"""
+    m = np.array([[1, 0], [0, 1]], dtype=bool)
+    with pytest.raises(ValueError, match="長度需相同"):
+        evaluate_segmentation([m, m], [m])
+
+
+def test_evaluate_segmentation_shape_mismatch_raises():
+    """同 index 但 shape 不符，提早丟清楚錯誤（不拖到 iou() 才炸）。"""
+    pred = np.zeros((2, 2), dtype=bool)
+    gt = np.zeros((3, 3), dtype=bool)
+    with pytest.raises(ValueError, match="shape mismatch"):
+        evaluate_segmentation([pred], [gt])

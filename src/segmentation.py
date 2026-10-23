@@ -89,9 +89,13 @@ def mask_to_original(
     用「完全相同」的 mask→原圖轉換，不會各自引入不一致的對齊誤差。
 
     前提：segment() 以 retina_masks=True 推論，mask 已去除 letterbox padding 且
-    對齊原圖解析度，因此正常情況 shape 已等於 (img_h, img_w)。若因模型/版本差異
-    仍有尺寸落差，改用最近鄰 resize（以 round 映射每個目標像素到最近來源像素，
-    而非等距抽樣端點；抽樣會漏像素並造成鋸齒、污染 IoU）。回傳 None 表示無有效 mask。
+    對齊原圖解析度，因此正常情況 shape 已等於 (img_h, img_w)，直接回傳。
+
+    若 shape 不符原圖：本函式「拒絕猜測」——回傳 None 並記 warning。原因是我們
+    無從判斷這個不符尺寸的 mask 是「乾淨的等比縮放」還是「含 letterbox padding
+    的 padded mask」；對後者盲目 resize 會悄悄重演座標錯位，還產出看似正常的錯誤
+    IoU。要支援 padded mask 必須帶入原始 letterbox 的 scale/pad metadata 反投影，
+    那屬另一條路徑（見 segment() 的 retina_masks）。回傳 None 表示無可信 mask。
     """
     if mask is None:
         return None
@@ -101,8 +105,12 @@ def mask_to_original(
     binary = m > 0.5
     if binary.shape == (img_h, img_w):
         return binary
-    src_h, src_w = binary.shape
-    # 最近鄰：每個目標座標 +0.5 居中後映射回來源，取 round 到最近來源像素
-    ys = np.minimum((np.arange(img_h) + 0.5) * src_h / img_h, src_h - 1).astype(int)
-    xs = np.minimum((np.arange(img_w) + 0.5) * src_w / img_w, src_w - 1).astype(int)
-    return binary[np.ix_(ys, xs)]
+    # shape 不符 → 來源座標系不明（可能含 letterbox padding），拒絕猜測
+    from src import logging_utils as _log
+
+    _log.warn(
+        f"mask shape {binary.shape} != image ({img_h}, {img_w})；"
+        "來源座標系不明（可能含 letterbox padding），拒絕盲目 resize。"
+        "請確認 segment() 以 retina_masks=True 推論。"
+    )
+    return None

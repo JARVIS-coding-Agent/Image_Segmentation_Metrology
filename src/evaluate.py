@@ -82,10 +82,16 @@ def evaluate_segmentation(
 ) -> list[EvaluationResult]:
     """以 ground truth mask 對照分割預測，實際計算 IoU 與 Dice（P0-A / M-7）。
 
-    pred_masks / gt_masks 為等尺寸的二值遮罩清單（通常為每張圖的聯集 mask）。
+    pred_masks / gt_masks 為等長、等尺寸的二值遮罩清單（通常為每張圖的聯集 mask）。
     回傳 [IoU 結果, Dice 結果]，value 為所有樣本平均；sample_size 為樣本數。
+    長度不等視為呼叫端 bug（配對錯亂）→ ValueError，不以 min() 靜默丟棄多餘樣本。
     """
-    n = min(len(pred_masks), len(gt_masks))
+    if len(pred_masks) != len(gt_masks):
+        raise ValueError(
+            f"pred_masks 與 gt_masks 長度需相同：pred={len(pred_masks)}, "
+            f"gt={len(gt_masks)}（長度不等代表 pred/gt 配對錯亂）"
+        )
+    n = len(pred_masks)
     if n == 0:
         return []
     for i in range(n):

@@ -1,7 +1,8 @@
 """mask_to_original 共用對齊函式測試（P0-B / IoU 對齊正確性）。
 
-重點：驗證 mask→原圖的轉換在「非方形影像」下仍對齊，不會像先前的等距抽樣
-把 letterbox padding 一起拉伸導致錯位。疊圖與 IoU/Dice 共用此函式。
+重點：驗證 mask→原圖轉換在 retina_masks 正常路徑（shape 已對齊）直接放行；
+而 shape 不符原圖時「拒絕猜測」回傳 None（來源座標系不明，可能含 letterbox
+padding，盲目 resize 會重演錯位）。疊圖與 IoU/Dice 共用此函式。
 """
 
 import numpy as np
@@ -33,26 +34,24 @@ def test_float_mask_thresholded():
     np.testing.assert_array_equal(out, np.array([[True, False], [True, False]]))
 
 
-def test_non_square_resize_preserves_orientation():
-    """非方形原圖：mask 需正確 resize 到 (H, W) 且保留左右/上下方向。
+def test_shape_mismatch_rejected_returns_none():
+    """shape 不符原圖時拒絕猜測（來源座標系不明，可能含 letterbox padding）。
 
-    以一個「左半部為 True」的小 mask，resize 到較大的非方形尺寸後，
-    左半部仍應為 True、右半部為 False（若用錯誤的抽樣/轉置會失敗）。
+    與其盲目 resize 一個來源不明的 mask（可能悄悄重演座標錯位、產出看似正常的
+    錯誤 IoU），不如回傳 None 讓呼叫端跳過該樣本。正常路徑應走 retina_masks，
+    mask 一開始就對齊原圖、不會進到這個分支。
     """
     small = np.zeros((2, 2), dtype=bool)
-    small[:, 0] = True  # 左半 True
-    out = mask_to_original(small, 8, 20)  # 非方形：高 8、寬 20
-    assert out.shape == (8, 20)
-    # 左半（前 10 欄）應大多為 True，右半應為 False
-    assert out[:, :10].all()
-    assert not out[:, 10:].any()
+    small[:, 0] = True
+    assert mask_to_original(small, 8, 20) is None  # 非方形、尺寸不符 → 拒絕
+    assert mask_to_original(small, 20, 8) is None
 
 
-def test_non_square_resize_vertical_orientation():
-    """上下方向同樣需保留：上半 True → resize 後上半仍 True。"""
-    small = np.zeros((2, 2), dtype=bool)
-    small[0, :] = True  # 上半 True
-    out = mask_to_original(small, 20, 8)  # 非方形：高 20、寬 8
+def test_mismatch_but_exact_shape_still_passes():
+    """尺寸恰等於原圖才放行（retina_masks 正常路徑）。"""
+    m = np.zeros((20, 8), dtype=bool)
+    m[0, :] = True
+    out = mask_to_original(m, 20, 8)
     assert out.shape == (20, 8)
-    assert out[:10, :].all()
-    assert not out[10:, :].any()
+    assert out[0, :].all()
+    assert not out[1:, :].any()
