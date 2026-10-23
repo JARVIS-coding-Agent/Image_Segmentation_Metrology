@@ -37,8 +37,44 @@ def test_find_dark_spots_two_symmetric():
 
 
 def test_find_dark_spots_empty_when_uniform():
-    # 全均勻：分位數閾值會抓到像素，但應仍可分群；測空輸入
+    # 空輸入 → 空清單
     assert find_dark_spots(np.array([]).reshape(0, 0), n=2) == []
+
+
+def test_find_dark_spots_low_contrast_returns_empty():
+    # 低對比（近均勻）影像：暗區不顯著 → 回空清單（C-3，避免假眼睛）
+    gray = np.full((20, 40), 128.0)
+    gray += np.random.RandomState(0).uniform(-3, 3, gray.shape)  # 極小雜訊
+    assert find_dark_spots(gray, n=2) == []
+
+
+def test_find_dark_spots_float01_still_detects():
+    # float [0,1] 輸入：入口 guard 應放大為 0–255，暗斑仍可偵測，
+    # 不因 median − min_contrast 恆為負而系統性回空（FRIDAY blocker）。
+    gray = np.full((20, 40), 0.5)  # 中位數 0.5
+    gray[8:12, 5:9] = 0.0          # 左暗斑
+    gray[8:12, 31:35] = 0.0        # 右暗斑
+    spots = find_dark_spots(gray, n=2)
+    assert len(spots) == 2
+    # 兩群質心 x 應分居左右
+    xs = sorted(s[0] for s in spots)
+    assert xs[0] < 20 < xs[1]
+
+
+def test_find_dark_spots_single_blob_returns_empty():
+    # 單一高對比暗斑：不應被硬切成一對假眼睛（ULTRON P1）。
+    # 暗斑連續、x 方向無顯著間隙 → 無法成對 → 回空清單。
+    gray = np.full((20, 40), 200.0)
+    gray[8:12, 18:23] = 10.0  # 單一連續暗斑，橫跨中線附近
+    assert find_dark_spots(gray, n=2) == []
+
+
+def test_detect_eyes_single_blob_unmeasurable():
+    # 單一暗斑經 detect_eyes → 兩眼皆 None（不輸出假眼睛對，ULTRON P1）。
+    img = np.full((40, 80, 3), 220, dtype=np.uint8)
+    img[8:12, 36:44] = 10  # 中央單一連續暗斑
+    left, right = detect_eyes(img, bbox=(0, 0, 80, 40))
+    assert left is None and right is None
 
 
 def test_detect_eyes_left_smaller_x():
@@ -55,10 +91,10 @@ def test_detect_eyes_left_smaller_x():
 
 
 def test_detect_eyes_returns_none_when_no_dark_region():
-    img = np.full((40, 80, 3), 128, dtype=np.uint8)  # 完全均勻，無對稱暗斑
+    # 完全均勻影像：無顯著暗區 → 兩眼皆為 None（C-3，不輸出垃圾座標）
+    img = np.full((40, 80, 3), 128, dtype=np.uint8)
     left, right = detect_eyes(img, bbox=(0, 0, 80, 40))
-    # 均勻影像下分位數仍會切出兩群，但可能退化；至少不應拋例外
-    assert (left is None) == (right is None)
+    assert left is None and right is None
 
 
 
