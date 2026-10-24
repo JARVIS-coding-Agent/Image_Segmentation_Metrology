@@ -7,7 +7,7 @@
 ## 專案介紹
 
 - **輸入**：COCO 資料集中含 ≥2 隻動物的圖片（動物類別任選）。
-- **處理**：YOLO11-seg 分割動物輪廓 → 以頭部 ROI + 幾何/暗區啟發式定位左右眼（SAM2 精修為可選）。
+- **處理**：YOLO11-seg 分割動物輪廓 → 定位左右眼（貓：Haar 貓臉偵測 + 臉內暗點；其他動物：頭部 ROI + 幾何/暗區啟發式；SAM2 精修為可選）。
 - **輸出**：
   - 疊圖（`outputs/annotated/*.png`）：mask、左右眼（左藍右紅）、量測連線與距離數值。
   - 量測 CSV（`outputs/measurements.csv`）：測量 A 與測量 B 共用固定欄位 schema。
@@ -85,17 +85,19 @@ $$\text{IoU} = \frac{|A \cap B|}{|A \cup B|} \qquad \text{Dice} = \frac{2|A \cap
 
 $$\text{NME} = \frac{1}{N}\sum_{i=1}^{N}\frac{\lVert p_i - \hat{p}_i \rVert_2}{d_{norm}}$$
 
-  - 評估實作見 `src/evaluate.py`（`iou` / `dice` / `nme`）。
+  - 評估實作見 `src/evaluate.py`（`iou` / `dice` / `nme` / `evaluate_segmentation`）；`--eval` 會以 COCO 標註為 ground truth 實際計算分割 IoU / Dice。
 
 ### 6. 量測方式與公式，以及如何驗證
 
 - **量測方式**：於像素座標（原點左上、x 向右、y 向下）計算歐氏距離；左右眼以影像視角的 x 位置區分（x 小者為左眼）。預設單位為像素，提供比例尺時可換算實際單位。
 - **驗證方式**（四層）：
   1. **疊圖人工目視**：`outputs/annotated/*.png` 檢查左右眼標記、連線與數值是否合理。
-  2. **ground truth 對照**：對 ≥10 張人工標註眼睛，計算 NME / 像素誤差（`--eval`）。
+  2. **ground truth 對照**：
+     - 分割品質（已實作）：`--eval` 以 COCO 標註為 ground truth，實際計算 YOLO 預測 mask 的 IoU / Dice。
+     - 眼睛定位（NME，待人工標註）：`src/evaluate.py` 已提供 NME 計算，需於 `data/ground_truth` 放入 ≥10 張人工眼睛標註方能啟用；目前展示未提供，報告會如實標示「尚未提供 ground truth」。
   3. **一致性檢查**：左右眼對稱性、雙眼距與頭框尺寸比例合理性。
-  4. **單元測試**：`pytest` 對距離公式與評估公式的已知座標驗證數學正確性（全套 43 測試通過，由 GitHub Actions CI 驗證；metrology/evaluate 覆蓋率 ≥ 80%）。
-- **效能與決定性**：以多張樣本實測單張 CPU 處理時間（20 張實測 P95 ≈ 0.74s，遠低於 5s 目標）；效能須以 ≥5 張樣本才具統計意義，單張展示（含模型載入）不作為效能依據，報告會標示「樣本數不足」。固定種子與 pinned 版本，相同輸入產生相同結果。
+  4. **單元測試**：`pytest` 對距離公式與評估公式的已知座標驗證數學正確性（全套 56 測試通過，由 GitHub Actions CI 驗證；metrology/evaluate 覆蓋率 ≥ 80%）。
+- **效能與決定性**：效能須以 ≥5 張樣本才具統計意義；本展示為單張（`000000555705.jpg`），`outputs/eval_report.md` 會如實標示「樣本數不足（n=1），不計 P95」並只列參考用的單張處理時間（含模型載入，約 6s）。若需具代表性的 P95，請以多張樣本執行 `--eval`。固定種子與 pinned 版本，相同輸入產生相同結果。
 
 > 展示結果：輸入 `data/samples/000000555705.jpg`、疊圖 `outputs/annotated/000000555705.png`、量測 `outputs/measurements.csv`、報告 `outputs/eval_report.md`。
 
